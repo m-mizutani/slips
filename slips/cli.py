@@ -72,11 +72,9 @@ def pack_zip_file(out_path, base_dir):
 
     def up_to_pkgdir(pdir):        
         up = os.path.dirname(pdir)
-        logger.info('UP %s -> %s', pdir, up)
-        return up if os.path.exists(pdir) else up_to_pkgdir(up)
+        return up if up.endswith('site-packages') else up_to_pkgdir(up)
     
     pkg_dir = os.path.normpath(up_to_pkgdir(boto3.__path__[0]))
-    print(pkg_dir)
 
     src_dir = os.path.join(base_dir, 'slips')
     src_dirs = [
@@ -94,7 +92,6 @@ def pack_zip_file(out_path, base_dir):
             if any(map(wpath.startswith, exclude_packages)):
                 continue
 
-            logger.info('archive %s -> %s', fpath, wpath)
             z.write(fpath, wpath)
 
 

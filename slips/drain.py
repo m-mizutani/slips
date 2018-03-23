@@ -23,7 +23,7 @@ def push_stream(dst_stream, items, table_name):
         records = [{
             'Data': json.dumps(rec).encode('utf8'),
             'PartitionKey': str(uuid.uuid4()),
-        } for req_id, rec in items]
+        } for req_id, rec in target]
         
         res = kinesis.put_records(Records=records, StreamName=dst_stream)
         if ('FailedRecordCount' not in res or res['FailedRecordCount'] > 0):
@@ -38,7 +38,9 @@ def push_stream(dst_stream, items, table_name):
             if res['ResponseMetadata']['HTTPStatusCode'] != 200:
                 logger.error('dynamodb.delete_item > %s', res)
                 raise Exception('Fail to delete items')
-    
+
+    return (dst_stream, len(items))
+
 
 def main(args):
     table_name = args['ERROR_TABLE']
@@ -46,11 +48,12 @@ def main(args):
     dynamodb = boto3.client('dynamodb')
     
     db_res = dynamodb.scan(TableName=table_name)
-    items = reduce(lambda x, y: x + y,
-                   [(x['request_id']['S'], json.loads(x['argument']['S']))
-                    for x in db_res.get('Items', [])])
-
+    items_set = [(x['request_id']['S'], json.loads(x['argument']['S']))
+                 for x in db_res.get('Items', [])]
+    items = [(req_id, arg) for req_id, arg_set in items_set for arg in arg_set]
+     
     queues = collections.defaultdict(list)
+    logger.info(items)
     for req_id, args in items:
         queues[args['dest_stream']].append((req_id, args))
 
