@@ -66,32 +66,49 @@ def fetch_file_path(dpath, root_dir):
     return tf
 
 
-def pack_zip_file(out_path, base_dir):
+def search_pkg_dir(pkg_dir):
+    for dname in os.listdir(pkg_dir):
+        fpath = os.path.join(pkg_dir, dname)
+        if os.path.isdir(fpath):
+            if fpath.endswith('.egg'):
+                yield (fpath, fpath)
+            else:
+                yield (fpath, pkg_dir)
+
+        
+def pack_zip_file(out_path, base_dir, own_dir):
     target_files = []
-    print(yaml.__path__)
 
     def up_to_pkgdir(pdir):        
         up = os.path.dirname(pdir)
         return up if up.endswith('site-packages') else up_to_pkgdir(up)
     
     pkg_dir = os.path.normpath(up_to_pkgdir(boto3.__path__[0]))
-
+    abs_own_dir = os.path.abspath(own_dir)
+    
+    logger.debug('BASE DIR: %s', base_dir)
     src_dir = os.path.join(base_dir, 'slips')
-    src_dirs = [
-        (pkg_dir, pkg_dir),
+    
+    src_dirs = list(search_pkg_dir(pkg_dir)) + [
+        # (pkg_dir, pkg_dir),
         # (os.path.join(base_dir, 'src'), base_dir),
         (src_dir, src_dir),
+        (src_dir, base_dir),
+        (abs_own_dir, base_dir),
     ]
 
     target_files = list(reduce(lambda x, y: x + y,
                                [fetch_file_path(*d) for d in src_dirs]))
     
-    exclude_packages = ['boto3', 'botocore', 'pip']
+    exclude_suffix = [
+        'boto3', 'botocore', 'pip', 'EGG-INFO', '__pycache__', 'setuptools'
+    ]
     with zipfile.ZipFile(out_path, 'w', zipfile.ZIP_DEFLATED) as z:
         for fpath, wpath in target_files:
-            if any(map(wpath.startswith, exclude_packages)):
+            if any(map(wpath.startswith, exclude_suffix)):
                 continue
 
+            logger.debug('zip %s -> %s', fpath, wpath)
             z.write(fpath, wpath)
 
 
@@ -166,6 +183,9 @@ class Task:
         psr.add_argument('-p', '--package-file')
         psr.add_argument('-y', '--generated-sam-yaml')
         psr.add_argument('-d', '--root-dir', default=BASE_DIR)
+        psr.add_argument('-v', '--verbose', action='store_true')
+        psr.add_argument('-s', '--src-dir', default='./src',
+                         help='Your source directory')
         psr.add_argument('command')
         psr.add_argument('meta_file')
         
@@ -173,6 +193,9 @@ class Task:
         meta = yaml.load(open(args.meta_file, 'rt'))
         cmd = args.command
 
+        if args.verbose:
+            logger.setLevel(logging.DEBUG)
+        
         if cmd not in ['pkg', 'config', 'deploy']:
             logger.error('Invalid command: %s', cmd)
             raise Exception('Command should be "pkg", "config" or "deploy"')
@@ -186,7 +209,7 @@ class Task:
             logger.info('no package file is given, building')
             tmp_fd, pkg_file = tempfile.mkstemp(suffix='.zip')
             os.close(tmp_fd)
-            pack_zip_file(pkg_file, args.root_dir)
+            pack_zip_file(pkg_file, args.root_dir, args.src_dir)
             
         logger.info('package file: %s', pkg_file)
 

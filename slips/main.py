@@ -6,7 +6,7 @@ import traceback
 import inspect
 import importlib.machinery as imm
 
-from handler.interface import Handler
+import slips.interface
 import parser
 
 logger = logging.getLogger()
@@ -27,7 +27,7 @@ def load_handlers(fpath):
     src_file = imm.SourceFileLoader(mod_name, full_path)
     mod = src_file.load_module()
     handlers = [m[1]() for m in inspect.getmembers(mod)
-                if inspect.isclass(m[1]) and Handler in m[1].__bases__]
+                if inspect.isclass(m[1]) and slips.interface.Handler in m[1].__bases__]
     logger.info('Loaded handlers: %s', handlers)
     return handlers
 
