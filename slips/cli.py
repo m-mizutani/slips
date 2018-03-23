@@ -68,11 +68,17 @@ def fetch_file_path(dpath, root_dir):
 
 def pack_zip_file(out_path, base_dir):
     target_files = []
-    pkg_dir = os.path.normpath(
-        os.path.join(os.path.dirname(yaml.__path__[0]))
-    )
+    print(yaml.__path__)
 
-    src_dir = os.path.join(base_dir, 'src')
+    def up_to_pkgdir(pdir):        
+        up = os.path.dirname(pdir)
+        logger.info('UP %s -> %s', pdir, up)
+        return up if os.path.exists(pdir) else up_to_pkgdir(up)
+    
+    pkg_dir = os.path.normpath(up_to_pkgdir(boto3.__path__[0]))
+    print(pkg_dir)
+
+    src_dir = os.path.join(base_dir, 'slips')
     src_dirs = [
         (pkg_dir, pkg_dir),
         # (os.path.join(base_dir, 'src'), base_dir),
@@ -88,6 +94,7 @@ def pack_zip_file(out_path, base_dir):
             if any(map(wpath.startswith, exclude_packages)):
                 continue
 
+            logger.info('archive %s -> %s', fpath, wpath)
             z.write(fpath, wpath)
 
 
@@ -162,11 +169,17 @@ class Task:
         psr.add_argument('-p', '--package-file')
         psr.add_argument('-y', '--generated-sam-yaml')
         psr.add_argument('-d', '--root-dir', default=BASE_DIR)
+        psr.add_argument('command')
         psr.add_argument('meta_file')
         
         args = psr.parse_args(argv)
         meta = yaml.load(open(args.meta_file, 'rt'))
-    
+        cmd = args.command
+
+        if cmd not in ['pkg', 'config', 'deploy']:
+            logger.error('Invalid command: %s', cmd)
+            raise Exception('Command should be "pkg", "config" or "deploy"')
+            
         logger.info('Bulding stack: %s', meta['stack_name'])
         
         pkg_file = args.package_file
@@ -179,6 +192,9 @@ class Task:
             pack_zip_file(pkg_file, args.root_dir)
             
         logger.info('package file: %s', pkg_file)
+
+        if cmd == 'pkg':
+            return
     
         yml_file = args.generated_sam_yaml
         if not yml_file:
@@ -188,6 +204,9 @@ class Task:
             os.write(tmp_fd, sam_template.encode('utf8'))
     
         logger.info('SAM template file: %s', yml_file)
+
+        if cmd == 'config':
+            return
     
         code_bucket = meta['base']['sam']['code_bucket']
         code_prefix = meta['base']['sam'].get('code_prefix')

@@ -306,6 +306,7 @@ def build_sam(meta, zpath):
                                               
 
 def main():
+    print(slips.__path__)
     slips.cli.Task(build_sam).run(sys.argv[1:])
     print('DEPLOOOOOYYYYYED!!')
 
