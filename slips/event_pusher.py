@@ -38,6 +38,7 @@ def main(args, event):
     routes = {
         'fast': args['DST_KINESIS_STREAM_FAST'],
         'slow': args['DST_KINESIS_STREAM_SLOW'],
+        'drop': None,
     }
     policies = json.loads(args['ROUTING_POLICY'])
     logger.debug('Routing policy: %s', policies)
@@ -46,6 +47,10 @@ def main(args, event):
     results = collections.defaultdict(int)
     for ev in utils.extract_s3_event(event):
         dest = routing(ev, policies, routes)
+        if not dest:
+            logger.debug('Drop route, ignore')
+            continue
+        
         ev['dest_stream'] = dest
         event_queue[dest].append(ev)
     
