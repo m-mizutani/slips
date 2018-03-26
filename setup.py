@@ -11,7 +11,7 @@ setup(
     description='Serverless Log Iterative Processing from S3',
     author='Masayoshi Mizutani',
     author_email='mizutani@cookpad.com',
-    install_requires=['boto3', 'PyYAML', 'python-dateutil'],
+    install_requires=['boto3', 'PyYAML'],
     packages=['slips'],
     scripts=['bin/slips'],
 )
