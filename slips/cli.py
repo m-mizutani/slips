@@ -78,7 +78,7 @@ def search_pkg_dir(pkg_dir):
         
 def pack_zip_file(out_path, base_dir, own_dir):
     target_files = []
-
+    cwd = os.path.abspath(os.getcwd())
     def up_to_pkgdir(pdir):        
         up = os.path.dirname(pdir)
         return up if up.endswith('site-packages') else up_to_pkgdir(up)
@@ -93,10 +93,10 @@ def pack_zip_file(out_path, base_dir, own_dir):
         # (pkg_dir, pkg_dir),
         # (os.path.join(base_dir, 'src'), base_dir),
         (src_dir, src_dir),
-        (src_dir, base_dir),
-        (abs_own_dir, base_dir),
+        (abs_own_dir, cwd),
     ]
 
+    wrote_path = set()    
     target_files = list(reduce(lambda x, y: x + y,
                                [fetch_file_path(*d) for d in src_dirs]))
     
@@ -105,11 +105,16 @@ def pack_zip_file(out_path, base_dir, own_dir):
     ]
     with zipfile.ZipFile(out_path, 'w', zipfile.ZIP_DEFLATED) as z:
         for fpath, wpath in target_files:
+            if wpath in wrote_path:
+                logger.debug('avoid duplicated path: %s -> %s', fpath, wpath)
+                continue
             if any(map(wpath.startswith, exclude_suffix)):
+                logger.debug('avoid excluded path: %s -> %s', fpath, wpath)
                 continue
 
             logger.debug('zip %s -> %s', fpath, wpath)
             z.write(fpath, wpath)
+            wrote_path.add(wpath)
 
 
 # -------------------------------------------------------------------
