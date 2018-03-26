@@ -111,7 +111,8 @@ class S3Lines(Spout):
                 line = raw.decode('utf8').rstrip()
                 meta = MetaData()
                 self.emit(meta, {'message': line})
-            except Exception as e:
+            except UnicodeDecodeError as e:
+                logger.error(e)
                 logger.error('Decoding error: %s', raw)
 
 
