@@ -90,9 +90,8 @@ def pack_zip_file(out_path, base_dir, own_dir):
     src_dir = os.path.join(base_dir, 'slips')
     
     src_dirs = list(search_pkg_dir(pkg_dir)) + [
-        # (pkg_dir, pkg_dir),
-        # (os.path.join(base_dir, 'src'), base_dir),
         (src_dir, src_dir),
+        (src_dir, os.path.normpath(os.path.join(src_dir, '..'))),
         (abs_own_dir, cwd),
     ]
 
