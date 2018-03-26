@@ -1,0 +1,5 @@
+config
+slips.egg-info/
+**/__pycache__/
+venv/
+
