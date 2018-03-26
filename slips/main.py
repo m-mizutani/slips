@@ -21,7 +21,7 @@ def load_handlers(fpath):
     # ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
     # full_path = os.path.join(ROOT_DIR, fpath)
     full_path = os.path.abspath(fpath)
-    mod_name = os.path.splitext(fpath)[0].replace('/', '.')
+    mod_name = os.path.splitext(fpath)[0].replace('/', '.').lstrip('.')
 
     logger.info('Loading handler code from %s as %s', full_path, mod_name)
 
@@ -34,7 +34,6 @@ def load_handlers(fpath):
 
 
 def create_parser(bucket_mapping, s3_bucket, s3_key):
-    print(slips.parser)
     bucket_config = bucket_mapping.get(s3_bucket)
     logger.debug(bucket_mapping)
 
@@ -77,13 +76,12 @@ def main(args, events):
         for ev in events:
             s3_bucket = ev['bucket_name']
             s3_key =    ev['object_key']
-
             stream = create_parser(bucket_mapping, s3_bucket, s3_key)
             stream.read(s3_bucket, s3_key, hdlr.recv)
 
         res = hdlr.result()
         logger.info('A result of %s -> %s', str(hdlr), res)
-        results[str(hdlr)] = res
+        results['.'.join([hdlr.__module__, hdlr.__class__.__name__])] = res
 
     return results
 
