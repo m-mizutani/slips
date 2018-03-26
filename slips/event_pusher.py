@@ -76,6 +76,7 @@ def main(args, event):
 
     
 def lambda_handler(event, context):
+    logger.info('Event: %s', json.dumps(event, indent=4))
     arg_keys = [
         'DST_KINESIS_STREAM_FAST',
         'DST_KINESIS_STREAM_SLOW',

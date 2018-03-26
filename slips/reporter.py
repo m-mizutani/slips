@@ -33,6 +33,7 @@ def main(args, event):
 
 
 def lambda_handler(event, context):
+    logger.info('Event: %s', json.dumps(event, indent=4))
     arg_keys = ['ERROR_TABLE']
     args = dict([(k, os.environ.get(k)) for k in arg_keys])
                             

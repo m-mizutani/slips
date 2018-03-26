@@ -87,6 +87,7 @@ def main(args, events):
 
 
 def lambda_handler(event, context):
+    logger.info('Event: %s', json.dumps(event, indent=4))
     arg_keys = [
         'HANDLER_PATH',
         'HANDLER_ARGS',

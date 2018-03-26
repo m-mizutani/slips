@@ -63,6 +63,7 @@ def main(args):
 
 
 def lambda_handler(event, context):
+    logger.info('Event: %s', json.dumps(event, indent=4))
     arg_keys = [
         'ERROR_TABLE', 'DST_KINESIS_STREAM',
     ]
