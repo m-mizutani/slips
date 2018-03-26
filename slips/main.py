@@ -7,7 +7,7 @@ import inspect
 import importlib.machinery as imm
 
 import slips.interface
-import parser
+import slips.parser
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -18,8 +18,9 @@ class FormatError(Exception):
 
 
 def load_handlers(fpath):
-    ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-    full_path = os.path.join(ROOT_DIR, fpath)
+    # ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+    # full_path = os.path.join(ROOT_DIR, fpath)
+    full_path = os.path.abspath(fpath)
     mod_name = os.path.splitext(fpath)[0].replace('/', '.')
 
     logger.info('Loading handler code from %s as %s', full_path, mod_name)
@@ -33,6 +34,7 @@ def load_handlers(fpath):
 
 
 def create_parser(bucket_mapping, s3_bucket, s3_key):
+    print(slips.parser)
     bucket_config = bucket_mapping.get(s3_bucket)
     logger.debug(bucket_mapping)
 
@@ -51,7 +53,7 @@ def create_parser(bucket_mapping, s3_bucket, s3_key):
                        ''.format(len(configs), s3_bucket, s3_key))
     logger.debug('Use config for %s/%s'.format(s3_bucket, configs[0]['prefix']))
 
-    stream = parser.Stream(configs[0]['format'])
+    stream = slips.parser.Stream(configs[0]['format'])
 
     return stream
 
