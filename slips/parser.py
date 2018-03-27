@@ -257,10 +257,11 @@ class AwsCloudtrailEvent(Parser):
                              '{}'.format(str(jdata)))
 
         for rec in jdata['Records']:
+            rec_meta = meta.copy()
             if 'eventTime' in rec:
                 dt = datetime.datetime.strptime(rec['eventTime'],
                                                 '%Y-%m-%dT%H:%M:%SZ')
-                meta.timestamp = int(dt.timestamp())
+                rec_meta.timestamp = int(dt.timestamp())
 
             rec['description'] = '{} {} by {} on {}'.format(
                 rec.get('eventType'), rec.get('eventName'),
@@ -269,8 +270,8 @@ class AwsCloudtrailEvent(Parser):
             )
 
             ev_type = 'aws.cloudtrail.{}'.format(rec.get('eventType'))
-            meta.tag = meta.tag or ev_type
-            self.emit(meta, rec)
+            rec_meta.tag = ev_type
+            self.emit(rec_meta, rec)
 
 
 class AwsGuardDuty(Parser):
