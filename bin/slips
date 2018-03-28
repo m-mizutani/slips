@@ -49,13 +49,14 @@ def build_event_pusher(processor, routing, kinesis_stream_fast,
     return config
 
 
-def build_dispatcher(base, processor, batch_size, kinesis_stream_arn):
+def build_dispatcher(base, backend, lane, kinesis_stream_arn):
     config = copy.deepcopy(FUNC_TEMPLATE)
     config['Properties']['Environment']['Variables'] = {
         'FUNC_NAME': { 'Fn::Sub': '${MainFunc}' },
+        'DELAY': lane.get('delay', 0),
         'REGION': base['aws']['region'],
     }
-    config['Properties']['Role'] = processor['role_arn']['dispatcher']
+    config['Properties']['Role'] = backend['role_arn']['dispatcher']
     config['Properties']['Handler'] = 'dispatcher.lambda_handler'
     config['Properties']['Events'] = {
         'StreamEvent': {
@@ -63,7 +64,7 @@ def build_dispatcher(base, processor, batch_size, kinesis_stream_arn):
             'Properties': {
                 'Stream': kinesis_stream_arn,
                 'StartingPosition': 'TRIM_HORIZON',
-                'BatchSize': batch_size,
+                'BatchSize': lane.get('batch_size', 1),
             },
         },
     }
@@ -75,19 +76,23 @@ def build_main_func(base, bucket_mapping, handler, sns_topic_arn):
     args_jdata = json.dumps(handler.get('args', {}), separators=(',', ':'))
     bmap_jdata = json.dumps(bucket_mapping, separators=(',', ':'))
     config = copy.deepcopy(FUNC_TEMPLATE)    
-    config['Properties']['Role'] = handler['role_arn']
-    config['Properties']['Handler'] = 'main.lambda_handler'
-    config['Properties']['Environment']['Variables'] = {
-        'HANDLER_PATH': handler['path'],
-        'HANDLER_ARGS': args_jdata,
-        'REGION': base['aws']['region'],
-        'BUCKET_MAPPING': bmap_jdata,
-    }
-    config['Properties']['DeadLetterQueue'] = {
-        'Type': 'SNS',
-        'TargetArn': sns_topic_arn,
-    }
-    config['Properties']['MemorySize'] = 1024
+    config['Properties'].update({
+        'Role': handler['role_arn'],
+        'Handler': 'main.lambda_handler',
+        'Environment': {
+            'Variables': {
+                'HANDLER_PATH': handler['path'],
+                'HANDLER_ARGS': args_jdata,
+                'BUCKET_MAPPING': bmap_jdata,
+            },
+        },
+        'DeadLetterQueue': {
+            'Type': 'SNS',
+            'TargetArn': sns_topic_arn,
+        },
+        'MemorySize': 1024,
+        'ReservedConcurrentExecutions': handler.get('concurrency', 5),
+    })
 
     if ('security_group_ids' in base['aws'] and 'subnet_ids' in base['aws']):
         config['Properties']['VpcConfig'] = {
@@ -240,10 +245,11 @@ def get_kinesis_stream(key_name, label, backend):
 def build_sam(meta, zpath):
     FUNC_TEMPLATE['Properties']['CodeUri'] = zpath
     base_conf =        meta['base']
-    proc_conf =        meta.get('backend', {})
+    backend =          meta.get('backend', {})
     hdlr_conf =        meta['handler']
     bucket_mapping =   meta['bucket_mapping']
     routing =          meta['routing']
+    lane_conf =        backend.get('lane')
     
     sam_config = copy.deepcopy(SAM_TEMPLATE)
     rsc = sam_config['Resources']
@@ -259,15 +265,15 @@ def build_sam(meta, zpath):
     ]
     ks_set = {}
     for label, key_name in kinesis_streams:
-        ks = get_kinesis_stream(key_name, label, proc_conf)
+        ks = get_kinesis_stream(key_name, label, backend)
         sam_config['Resources'][label] = ks['config']
         ks_set[label] = ks
         
     #
     # Create DynamoDB table if needed.
     #
-    if 'dynamodb_table_name' in proc_conf:
-        dynamodb_table_name = proc_conf['dynamodb_table_name']
+    if 'dynamodb_table_name' in backend:
+        dynamodb_table_name = backend['dynamodb_table_name']
     else:
         rsc['ErrorTable'] = build_error_table()
         dynamodb_table_name = { 'Fn::Sub': '${ErrorTable}' }
@@ -275,8 +281,8 @@ def build_sam(meta, zpath):
     #
     # Create SNS topic if needed.
     #
-    if 'dlq_sns_arn' in proc_conf:
-        sns_topic_arn = proc_conf['dlq_sns_arn']
+    if 'dlq_sns_arn' in backend:
+        sns_topic_arn = backend['dlq_sns_arn']
     else:
         rsc['ErrorNotify'] = build_error_notification_sns()
         sns_topic_arn = {'Ref': 'ErrorNotify'}
@@ -286,16 +292,18 @@ def build_sam(meta, zpath):
     #
     rsc.update({
         # Backend Functions
-        'EventPusher': build_event_pusher(proc_conf, routing,
+        'EventPusher': build_event_pusher(backend, routing,
                                           ks_set['EventFastStream']['name'],
                                           ks_set['EventSlowStream']['name']),
-        'FastDispatcher': build_dispatcher(base_conf, proc_conf, 32,
+        'FastDispatcher': build_dispatcher(base_conf, backend,
+                                           lane_conf.get('fast', {}),
                                            ks_set['EventFastStream']['arn']),
-        'SlowDispatcher': build_dispatcher(base_conf, proc_conf, 1,
+        'SlowDispatcher': build_dispatcher(base_conf, backend,
+                                           lane_conf.get('slow', {}),
                                            ks_set['EventSlowStream']['arn']),
-        'Reporter':    build_reporter(base_conf, proc_conf, sns_topic_arn,
+        'Reporter':    build_reporter(base_conf, backend, sns_topic_arn,
                                       dynamodb_table_name),
-        'Drain':       build_drain(base_conf, proc_conf, dynamodb_table_name),
+        'Drain':       build_drain(base_conf, backend, dynamodb_table_name),
         
         # Main Function
         'MainFunc':    build_main_func(base_conf, bucket_mapping,
