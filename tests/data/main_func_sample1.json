@@ -1,0 +1,13 @@
+[
+{
+    "aws_region": "ap-northeast-1",
+    "event_time": "2018-03-26T02:13:07.636Z",
+    "event_name": "ObjectCreated:Put",
+    "bucket_name": "slam-test",
+    "bucket_arn": "arn:aws:s3:::slam-test",
+    "object_key": "logs/cylance/2018/03/26/cylance_20180326_010000.log.gz",
+    "object_size": 20,
+    "object_etag": "29cb59533db02b0253832e77cb8e9df4",
+    "dest_stream": "slam-logproc-test2-EventSlowStream-1189S614VCRQD"
+}
+]

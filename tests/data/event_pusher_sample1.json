@@ -1,0 +1,22 @@
+{
+    "Records": [
+        {
+            "EventSource": "aws:sns",
+            "EventVersion": "1.0",
+            "EventSubscriptionArn": "arn:aws:sns:ap-northeast-1:214219211678:seclog-event:18be30ab-39d3-42ab-aad2-41149f02009f",
+            "Sns": {
+                "Type": "Notification",
+                "MessageId": "a317a530-bbca-5637-8d27-f602e2b92d35",
+                "TopicArn": "arn:aws:sns:ap-northeast-1:214219211678:seclog-event",
+                "Subject": "Amazon S3 Notification",
+                "Message": "{\"Records\":[{\"eventVersion\":\"2.0\",\"eventSource\":\"aws:s3\",\"awsRegion\":\"ap-northeast-1\",\"eventTime\":\"2018-03-26T02:13:07.636Z\",\"eventName\":\"ObjectCreated:Put\",\"userIdentity\":{\"principalId\":\"AWS:AROAIG4QBFZ7CWMSVIPTC:slam-log-collector-test-CylanceImporter-E2L7ZQI17U7N\"},\"requestParameters\":{\"sourceIPAddress\":\"10.18.9.97\"},\"responseElements\":{\"x-amz-request-id\":\"F004783AC7E31E10\",\"x-amz-id-2\":\"kH4dgy3MXvN3xOcCat+r/RL6Kt+n/NPRfkV+gPO/fImuOoAAQRJQ0CDKUiNymBsnIevtaP7VrEo=\"},\"s3\":{\"s3SchemaVersion\":\"1.0\",\"configurationId\":\"CreateEvent\",\"bucket\":{\"name\":\"slam-test\",\"ownerIdentity\":{\"principalId\":\"A29FHGP6L6DFVT\"},\"arn\":\"arn:aws:s3:::slam-test\"},\"object\":{\"key\":\"logs/cylance/2018/03/26/cylance_20180326_010000.log.gz\",\"size\":20,\"eTag\":\"29cb59533db02b0253832e77cb8e9df4\",\"sequencer\":\"005AB85733928BD6ED\"}}}]}",
+                "Timestamp": "2018-03-26T02:13:07.727Z",
+                "SignatureVersion": "1",
+                "Signature": "KObVGVYdXwboEIAQmdeEnw+JArocArSVzjJhnOZp/SJcGvfgwhNmwOqyOXC84hLZAyj1hrNZuljzeeeIa8YFiLhzsEYC6aZ+gS/RJp3/MiLUrJW73YDn/0InHGzaAC+DFJgpoZ9vdako2DrScpWwfIhl6055n+f4Yeo6Xin3VK1y5cKc/D6DQlhgVqXzLmKJ63EO3enAYDhsT14pjr10v7x4jr1vASCl6Mlo0uyiPD5OJeAqgzGJ87HNB5UbfVJjw/mQRgJoWSiZ7dJ/9HOMA3IIJRa4/lfWbd7ta/8lgexPOv65XsumYCk1R8J9z5zPUqjfu3MErhnLshjl4r8gkg==",
+                "SigningCertUrl": "https://sns.ap-northeast-1.amazonaws.com/SimpleNotificationService-433026a4050d206028891664da859041.pem",
+                "UnsubscribeUrl": "https://sns.ap-northeast-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:ap-northeast-1:214219211678:seclog-event:18be30ab-39d3-42ab-aad2-41149f02009f",
+                "MessageAttributes": {}
+            }
+        }
+    ]
+}
