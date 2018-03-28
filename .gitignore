@@ -1,4 +1,6 @@
-config
+.coverage
+.eggs/
+.pytest_cache/
 slips.egg-info/
 **/__pycache__/
 venv/
