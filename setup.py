@@ -14,4 +14,6 @@ setup(
     install_requires=['boto3', 'PyYAML'],
     packages=['slips'],
     scripts=['bin/slips'],
+    setup_requires=['pytest-runner'],
+    tests_require=['pytest-cov', 'pytest'],
 )
