@@ -74,6 +74,11 @@ Deploy
 $ slips deploy your_config.yml
 ```
 
+NOTE: You should have AWS credential with deploy command such as environment variable `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+
+
+
+
 Test for only SLIPS
 --------------
 
@@ -82,5 +87,3 @@ $ git clone git@ghe.ckpd.co:mizutani/slips.git
 $ cd slips
 $ python setup.py test
 ```
-
-NOTE: You should have AWS credential with deploy command such as environment variable `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
