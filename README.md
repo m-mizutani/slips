@@ -76,7 +76,9 @@ $ slips deploy your_config.yml
 
 NOTE: You should have AWS credential with deploy command such as environment variable `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
 
+Then creating a CloudFormation stack `sample-stack-***` like a following figure.
 
+![CFn Stack overview](docs/stack-overview.png)
 
 
 Test for only SLIPS
