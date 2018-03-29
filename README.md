@@ -10,7 +10,7 @@ Prerequisite
 - AWS credential with permissions to create CloudFormation Stack
 - S3 bucket(s)
     - Bucket(s) must send notification of ObjectCreated to SNS. See details in [official document](https://docs.aws.amazon.com/AmazonS3/latest/dev/ways-to-add-notification-config-to-bucket.html).
-
+- aws-cli >= 1.11.190
 
 Setup SLIPS in your project
 ------------
