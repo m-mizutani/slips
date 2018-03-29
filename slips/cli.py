@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import abc
 import yaml
 import io
 import boto3
@@ -11,6 +12,8 @@ import argparse
 import logging
 import tempfile
 import subprocess
+
+from . import sam
 
 
 logger = logging.getLogger()
@@ -116,122 +119,143 @@ def pack_zip_file(out_path, base_dir, own_dir):
             wrote_path.add(wpath)
 
 
+class Job(abc.ABC):
+    @abc.abstractmethod
+    def exec(self, args, meta):
+        pass
+
+
+class Package(Job):
+    def exec(self, args, meta):
+        # ----------
+        # Create zip file including Python sorce codes
+        logger.info('no package file is given, building')
+        tmp_fd, pkg_file = tempfile.mkstemp(suffix='.zip')
+        os.close(tmp_fd)
+        pack_zip_file(pkg_file, args.root_dir, args.src_dir)
+        return pkg_file
+    
+
+
 # -------------------------------------------------------------------
 # Deployment section
 #
 
-def deploy(stack_name, yml_file, pkg_file, code_bucket, code_prefix):
-    sam_fd, sam_file = tempfile.mkstemp(suffix='.yml')
-    os.close(sam_fd)
-
-    # ---------------------
-    # Packaging and generating SAM yaml file for actual deploy
-    #
-    pkg_cmd = [
-        'aws', 'cloudformation', 'package', '--template-file', yml_file,
-        '--s3-bucket', code_bucket, '--output-template-file', sam_file,
-    ]
-    if code_prefix:
-        pkg_cmd += ['--s3-prefix', code_prefix]
-
-    logger.debug('Run: %s', ' '.join(pkg_cmd))
-    pkg_res = subprocess.run(pkg_cmd, stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-    logger.debug('Return code: %d\nSTDOUT: %s\nSTDERR: %s',
-                 pkg_res.returncode, pkg_res.stdout, pkg_res.stderr)
-    if pkg_res.returncode != 0:
-        logger.error('aws command failed => %s', pkg_res.stderr)
-        raise Exception('aws command failed: {}'.format(pkg_res.stderr))
+class Deploy(Job):
+    @staticmethod
+    def deploy(stack_name, yml_file, pkg_file, code_bucket, code_prefix):
+        sam_fd, sam_file = tempfile.mkstemp(suffix='.yml')
+        os.close(sam_fd)
     
-    logger.info('generated SAM file: %s', sam_file)
-
-    # ---------------------
-    # Deploying
-    #
-    deploy_cmd = [
-        'aws', 'cloudformation', 'deploy', '--template-file', sam_file,
-        '--stack-name', stack_name,
-    ]
-    logger.debug('Run: %s', ' '.join(deploy_cmd))
+        # ---------------------
+        # Packaging and generating SAM yaml file for actual deploy
+        #
+        pkg_cmd = [
+            'aws', 'cloudformation', 'package', '--template-file', yml_file,
+            '--s3-bucket', code_bucket, '--output-template-file', sam_file,
+        ]
+        if code_prefix:
+            pkg_cmd += ['--s3-prefix', code_prefix]
     
-    deploy_res = subprocess.run(deploy_cmd, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
-    logger.debug('Return code: %d\nSTDOUT: %s\nSTDERR: %s',
-                 deploy_res.returncode, deploy_res.stdout.decode('utf8'),
-                 deploy_res.stderr.decode('utf8'))
-    
-    changed = True
-    if deploy_res.returncode != 0:
-        errmsg = deploy_res.stderr.decode('utf8')
-        if errmsg.startswith('\nNo changes to deploy.'):
-            changed = False
-        else:
-            logger.error('aws command failed (%d) => %s',
-                         deploy_res.returncode, errmsg)
-            raise Exception('aws command failed: {}'.format(errmsg))
-    
-    logger.info('Completed (%s)', 'Applied' if changed else 'No changes')
-
-    return None
-
-    
-class Task:
-    def __init__(self, sam_builder):
-        logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s '
-                            '[%(filename)s:%(lineno)d] %(message)s',
-                            datefmt='%Y-%m-%d %H:%M:%S')
-        self._sam_bulder = sam_builder
-
-    def run(self, argv):
-        psr = argparse.ArgumentParser()
-        psr.add_argument('-p', '--package-file')
-        psr.add_argument('-y', '--generated-sam-yaml')
-        psr.add_argument('-d', '--root-dir', default=BASE_DIR)
-        psr.add_argument('-v', '--verbose', action='store_true')
-        psr.add_argument('-s', '--src-dir', default='./src',
-                         help='Your source directory')
-        psr.add_argument('command')
-        psr.add_argument('meta_file')
+        logger.debug('Run: %s', ' '.join(pkg_cmd))
+        pkg_res = subprocess.run(pkg_cmd, stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE)
+        logger.debug('Return code: %d\nSTDOUT: %s\nSTDERR: %s',
+                     pkg_res.returncode, pkg_res.stdout, pkg_res.stderr)
+        if pkg_res.returncode != 0:
+            logger.error('aws command failed => %s', pkg_res.stderr)
+            raise Exception('aws command failed: {}'.format(pkg_res.stderr))
         
-        args = psr.parse_args(argv)
-        meta = yaml.load(open(args.meta_file, 'rt'))
-        cmd = args.command
-
-        if args.verbose:
-            logger.setLevel(logging.DEBUG)
+        logger.info('generated SAM file: %s', sam_file)
+    
+        # ---------------------
+        # Deploying
+        #
+        deploy_cmd = [
+            'aws', 'cloudformation', 'deploy', '--template-file', sam_file,
+            '--stack-name', stack_name,
+        ]
+        logger.debug('Run: %s', ' '.join(deploy_cmd))
         
-        if cmd not in ['pkg', 'config', 'deploy']:
-            logger.error('Invalid command: %s', cmd)
-            raise Exception('Command should be "pkg", "config" or "deploy"')
-            
+        deploy_res = subprocess.run(deploy_cmd, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+        logger.debug('Return code: %d\nSTDOUT: %s\nSTDERR: %s',
+                     deploy_res.returncode, deploy_res.stdout.decode('utf8'),
+                     deploy_res.stderr.decode('utf8'))
+        
+        changed = True
+        if deploy_res.returncode != 0:
+            errmsg = deploy_res.stderr.decode('utf8')
+            if errmsg.startswith('\nNo changes to deploy.'):
+                changed = False
+            else:
+                logger.error('aws command failed (%d) => %s',
+                             deploy_res.returncode, errmsg)
+                raise Exception('aws command failed: {}'.format(errmsg))
+        
+        logger.info('Completed (%s)', 'Applied' if changed else 'No changes')
+    
+        return None
+    
+    def exec(self, args, meta):
         logger.info('Bulding stack: %s', meta['stack_name'])
         
-        pkg_file = args.package_file
-        if not pkg_file:
-            # ----------
-            # Create zip file including Python sorce codes
-            logger.info('no package file is given, building')
-            tmp_fd, pkg_file = tempfile.mkstemp(suffix='.zip')
-            os.close(tmp_fd)
-            pack_zip_file(pkg_file, args.root_dir, args.src_dir)
-            
+        given_pkg_file = args.package_file
+        pkg_file = given_pkg_file if given_pkg_file else Package().exec(args, meta)
         logger.info('package file: %s', pkg_file)
 
-        if cmd == 'pkg':
-            return
-    
         yml_file = args.generated_sam_yaml
         if not yml_file:
             logger.info('no SAM template file is given, building')
-            sam_template = self._sam_bulder(meta, pkg_file)
+
+            
+            sam_template = sam.build(meta, pkg_file)
             tmp_fd, yml_file = tempfile.mkstemp(suffix='.yml')
             os.write(tmp_fd, sam_template.encode('utf8'))
-    
+            
         logger.info('SAM template file: %s', yml_file)
-
-        if cmd == 'config':
-            return
-    
         code_bucket = meta['base']['sam']['code_bucket']
         code_prefix = meta['base']['sam'].get('code_prefix')
-        deploy(meta['stack_name'], yml_file, pkg_file, code_bucket, code_prefix)
+
+        if args.dry_run:
+            print('- - - - built SAM configuration file - - - -\n')
+            print(open(yml_file).read())
+        else:
+            Deploy.deploy(meta['stack_name'], yml_file, pkg_file,
+                          code_bucket, code_prefix)
+        
+
+class Task:
+    def __init__(self):
+        logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s '
+                            '[%(filename)s:%(lineno)d] %(message)s',
+                            datefmt='%Y-%m-%d %H:%M:%S')
+
+    def run(self, argv):
+        psr = argparse.ArgumentParser()
+        psr.add_argument('-v', '--verbose', action='store_true')
+        psr.add_argument('-c', '--meta-file', default='config.yml')
+
+        subpsr = psr.add_subparsers()
+
+        psr_deploy = subpsr.add_parser('deploy')
+        psr_deploy.add_argument('-p', '--package-file')
+        psr_deploy.add_argument('-y', '--generated-sam-yaml')
+        psr_deploy.add_argument('-d', '--root-dir', default=BASE_DIR)
+        psr_deploy.add_argument('-s', '--src-dir', default='./src',
+                                help='Your source directory')
+        psr_deploy.add_argument('--dry-run', action='store_true')
+        psr_deploy.set_defaults(handler=Deploy)
+
+        args = psr.parse_args(argv)
+        
+        meta = yaml.load(open(args.meta_file, 'rt'))
+        if args.verbose:
+            logger.setLevel(logging.DEBUG)
+
+        if hasattr(args, 'handler'):
+            args.handler().exec(args, meta)
+        else:
+            psr.print_help()
+            
+        logger.info('DOOOOOOOOOOONEEEEEE!')
