@@ -177,7 +177,6 @@ class ShowErrors(Job):
                       ''.format(arg['event_time'], req_id, arg['bucket_name'],
                                 arg['object_key'], arg['object_size']))
 
-
         
 class Drain(Job):
     def exec(self, args, meta):
@@ -195,9 +194,10 @@ class Drain(Job):
 # Deployment section
 #
 
+    
 class Deploy(Job):
     @staticmethod
-    def deploy(stack_name, yml_file, pkg_file, code_bucket, code_prefix):
+    def configure(yml_file, pkg_file, code_bucket, code_prefix):
         sam_fd, sam_file = tempfile.mkstemp(suffix='.yml')
         os.close(sam_fd)
     
@@ -221,7 +221,10 @@ class Deploy(Job):
             raise Exception('aws command failed: {}'.format(pkg_res.stderr))
         
         logger.info('generated SAM file: %s', sam_file)
-    
+        return sam_file
+
+    @staticmethod
+    def deploy(stack_name, sam_file):
         # ---------------------
         # Deploying
         #
@@ -271,12 +274,13 @@ class Deploy(Job):
         code_bucket = meta['base']['sam']['code_bucket']
         code_prefix = meta['base']['sam'].get('code_prefix')
 
+        sam_file = Deploy.configure(yml_file, pkg_file, code_bucket, code_prefix)
+        
         if args.dry_run:
-            print('- - - - built SAM configuration file - - - -\n')
-            print(open(yml_file).read())
+            print(open(sam_file).read())
         else:
-            Deploy.deploy(meta['stack_name'], yml_file, pkg_file,
-                          code_bucket, code_prefix)
+            Deploy.deploy(meta['stack_name'], sam_file)
+
         
 
 class Task:
