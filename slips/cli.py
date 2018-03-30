@@ -2,6 +2,7 @@
 
 import abc
 import yaml
+import json
 import io
 import boto3
 import base64
@@ -124,6 +125,20 @@ class Job(abc.ABC):
     def exec(self, args, meta):
         pass
 
+    @staticmethod
+    def _get_resource_info(meta, logical_name):
+        cfn = boto3.client('cloudformation')
+        res = cfn.describe_stack_resources(StackName=meta['stack_name'])
+
+        resources = [x for x in res['StackResources']
+                     if x['LogicalResourceId'] == logical_name]
+        if len(resources) != 1:
+            logger.error('Available resources: %s',
+                         [x['LogicalResourceId'] for x in res['StackResources']])
+            raise Exception('ErrorTable is not found')
+
+        return resources[0]
+        
 
 class Package(Job):
     def exec(self, args, meta):
@@ -136,6 +151,31 @@ class Package(Job):
         return pkg_file
     
 
+class ShowErrors(Job):
+    def exec(self, args, meta):
+        resource = Job._get_resource_info(meta, 'ErrorTable')
+        table_name = resource['PhysicalResourceId']
+        logger.debug('Physical Table Name: %s', table_name)
+        
+        dynamodb = boto3.client('dynamodb')
+        table_res = dynamodb.scan(TableName=table_name)
+
+        logger.info('Total number of error items: %s', table_res['Count'])
+        for item in table_res['Items']:
+            print(item)
+
+        
+class Drain(Job):
+    def exec(self, args, meta):
+        resource = Job._get_resource_info(meta, 'Drain')
+        func_name = resource['PhysicalResourceId']
+        logger.debug('Physical Function Name: %s', func_name)
+
+        client = boto3.client('lambda')
+        res = client.invoke(FunctionName=func_name, Payload=b'{}')
+        logger.debug('Result: %s', res)
+        logger.info('Return value: %s', res['Payload'].read())
+        
 
 # -------------------------------------------------------------------
 # Deployment section
@@ -238,7 +278,9 @@ class Task:
 
         subpsr = psr.add_subparsers()
 
-        psr_deploy = subpsr.add_parser('deploy')
+        # -----------------------------
+        # Deploy
+        psr_deploy = subpsr.add_parser('deploy', help='Deploy CFn stack')
         psr_deploy.add_argument('-p', '--package-file')
         psr_deploy.add_argument('-y', '--generated-sam-yaml')
         psr_deploy.add_argument('-d', '--root-dir', default=BASE_DIR)
@@ -247,6 +289,16 @@ class Task:
         psr_deploy.add_argument('--dry-run', action='store_true')
         psr_deploy.set_defaults(handler=Deploy)
 
+        # -----------------------------
+        # Show Errors
+        psr_errors = subpsr.add_parser('errors', help='Show errors')
+        psr_errors.set_defaults(handler=ShowErrors)
+
+        # -----------------------------
+        # Drain
+        psr_drain = subpsr.add_parser('drain', help='Drain error items for retry')
+        psr_drain.set_defaults(handler=Drain)
+        
         args = psr.parse_args(argv)
         
         meta = yaml.load(open(args.meta_file, 'rt'))
