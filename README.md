@@ -110,9 +110,16 @@ Then creating a CloudFormation stack `sample-stack-***` like a following figure.
 
 ```bash
 $ slips -c your_config.yml errors
+(snip)
+2018-03-29T16:35:15.768Z:  2a45219e-336f-11e8-a549-af410f2364a8  slam-test        logs/2018/03/29/20180329_15.log.gz (1179 byte)
+2018-03-29T17:35:14.502Z:  8b0bef71-3377-11e8-9d45-8513ea3507ba  slam-test        logs/2018/03/29/20180329_16.log.gz (7394 byte)
+2018-03-29T17:35:15.311Z:  8b895cc2-3377-11e8-b432-85f269890763  slam-test        logs/2018/03/29/20180329_16.log.gz (357 byte)
+(snip)
 ```
 
 Then, you can see a list of error items in ErrorTable.
+
+
 
 ### Drain and Retry Error Items
 
