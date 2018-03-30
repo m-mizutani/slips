@@ -161,8 +161,22 @@ class ShowErrors(Job):
         table_res = dynamodb.scan(TableName=table_name)
 
         logger.info('Total number of error items: %s', table_res['Count'])
+        import pprint
+
+        rows = []
         for item in table_res['Items']:
-            print(item)
+            req_id = item.get('request_id', {}).get('S')
+            jdata = item.get('argument', {}).get('S')
+            if not req_id or not jdata:
+                logger.error('Invalid format item: {}'.format(item))
+                continue
+
+            args = json.loads(jdata)
+            for arg in args:
+                print('{}:  {}  {:16s} {} ({} byte)'
+                      ''.format(arg['event_time'], req_id, arg['bucket_name'],
+                                arg['object_key'], arg['object_size']))
+
 
         
 class Drain(Job):
