@@ -91,18 +91,36 @@ class YourHandler(slips.interface.Handler):
 
 ```
 
-Deploy
----------------
-
-```bash
-$ slips deploy your_config.yml
-```
+Usage
+--------------
 
 NOTE: You should have AWS credential with deploy command such as environment variable `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`.
+
+### Deploy
+
+```bash
+$ slips -c your_config.yml deploy
+```
 
 Then creating a CloudFormation stack `sample-stack-***` like a following figure.
 
 ![CFn Stack overview](docs/stack-overview.png)
+
+### Show Error Items
+
+```bash
+$ slips -c your_config.yml errors
+```
+
+Then, you can see a list of error items in ErrorTable.
+
+### Drain and Retry Error Items
+
+```bash
+$ slips -c your_config.yml drain
+```
+
+Then, error items will be put into Kinesis Stream again (Fast-lane or Slow-lane) and deleted from ErrorTable.
 
 
 Test for only SLIPS
