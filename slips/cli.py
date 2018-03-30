@@ -135,7 +135,7 @@ class Job(abc.ABC):
         if len(resources) != 1:
             logger.error('Available resources: %s',
                          [x['LogicalResourceId'] for x in res['StackResources']])
-            raise Exception('ErrorTable is not found')
+            raise Exception('{} is not found'.format(logical_name))
 
         return resources[0]
         
