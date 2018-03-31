@@ -17,7 +17,6 @@ def obj2yml(obj):
     return ss.read()
 
 
-
 SAM_TEMPLATE = {
     'AWSTemplateFormatVersion': '2010-09-09',
     'Transform': 'AWS::Serverless-2016-10-31',
@@ -39,6 +38,27 @@ FUNC_TEMPLATE = {
             'Variables': {},
         },
     },
+}
+
+ROLE_TEMPLATE = {
+    'Type': 'AWS::IAM::Role',
+    'Properties': {
+        'AssumeRolePolicyDocument': {
+            'Version' : '2012-10-17',
+            'Statement': [ {
+                'Effect': 'Allow',
+                'Principal': {
+                    'Service': [ 'lambda.amazonaws.com' ]
+                },
+                'Action': [ 'sts:AssumeRole' ]
+            } ]
+        },
+        'Path': '/',
+        'ManagedPolicyArns': [
+            'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+        ],
+        'Policies': [],
+    }
 }
 
 
@@ -65,7 +85,6 @@ def build_dispatcher(base, backend, lane, kinesis_stream_arn):
     config['Properties']['Environment']['Variables'] = {
         'FUNC_NAME': { 'Fn::Sub': '${MainFunc}' },
         'DELAY': lane.get('delay', 0),
-        'REGION': base['aws']['region'],
     }
     config['Properties']['Role'] = backend['role_arn']['dispatcher']
     config['Properties']['Handler'] = 'dispatcher.lambda_handler'
@@ -83,12 +102,12 @@ def build_dispatcher(base, backend, lane, kinesis_stream_arn):
     return config
 
 
-def build_main_func(base, bucket_mapping, handler, sns_topic_arn):
+def build_main_func(base, bucket_mapping, handler, sns_topic_arn, role_arn):
     args_jdata = json.dumps(handler.get('args', {}), separators=(',', ':'))
     bmap_jdata = json.dumps(bucket_mapping, separators=(',', ':'))
     config = copy.deepcopy(FUNC_TEMPLATE)    
     config['Properties'].update({
-        'Role': handler['role_arn'],
+        'Role': role_arn,
         'Handler': 'main.lambda_handler',
         'Environment': {
             'Variables': {
@@ -105,10 +124,10 @@ def build_main_func(base, bucket_mapping, handler, sns_topic_arn):
         'ReservedConcurrentExecutions': handler.get('concurrency', 5),
     })
 
-    if ('security_group_ids' in base['aws'] and 'subnet_ids' in base['aws']):
+    if ('security_group_ids' in handler and 'subnet_ids' in handler):
         config['Properties']['VpcConfig'] = {
-            'SecurityGroupIds':  base['aws']['security_group_ids'],
-            'SubnetIds':         base['aws']['subnet_ids'],
+            'SecurityGroupIds':  handler['security_group_ids'],
+            'SubnetIds':         handler['subnet_ids'],
         }
     
     return config
@@ -252,6 +271,69 @@ def get_kinesis_stream(key_name, label, backend):
             'name': {'Fn::Sub': '${{{}}}'.format(label)},
         }
 
+    
+def build_role_main_func(mapping, sns_topic_arn):
+    resources = ['arn:aws:s3:::{}/{}*'.format(b, c['prefix'])
+                 for b, x in mapping.items() for c in x]
+
+    config = copy.deepcopy(ROLE_TEMPLATE)
+    config['Policies'] = [
+        {
+            'PolicyName': 'S3ObjectReadable',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    'Action': ['s3:GetObject'],
+                    'Resource': resources,
+                } ]
+            }
+        },
+        {
+            'PolicyName': 'SNSPublishable',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    'Action': ['sns:Publish'],
+                    'Resource': sns_topic_arn,
+                } ]
+            }
+        },
+    ]
+
+    return config
+
+
+def build_role_reporter():
+    config = copy.deepcopy(ROLE_TEMPLATE)
+    config['Policies'] = [
+        {
+            'PolicyName': 'S3ObjectReadable',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    'Action': ['s3:GetObject'],
+                    'Resource': resources,
+                } ]
+            }
+        },
+        {
+            'PolicyName': 'SNSPublishable',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    'Action': ['sns:Publish'],
+                    'Resource': sns_topic_arn,
+                } ]
+            }
+        },
+    ]
+    
+    return config
+
 
 def build(meta, zpath):
     FUNC_TEMPLATE['Properties']['CodeUri'] = zpath
@@ -297,7 +379,21 @@ def build(meta, zpath):
     else:
         rsc['ErrorNotify'] = build_error_notification_sns()
         sns_topic_arn = {'Ref': 'ErrorNotify'}
-    
+
+    if 'role_arn' in hdlr_conf:
+        role_main_func = hdlr_conf['role_arn']
+    else:
+        rsc['MainFuncRole'] = build_role_main_func(bucket_mapping, sns_topic_arn)
+        role_main_func = {'Fn::GetAtt' : ['MainFuncRole', 'Arn'] }
+
+    # Roles
+    roles_conf = backend.get('role_arn', {})
+    if 'reporter' in roles_conf:
+        role_reporter = roles_conf['reporter']
+    else:
+        rsc['ReporterRole'] = build_role_reporter()
+        role_reporter = {'Fn::GetAtt' : ['ReporterRole', 'Arn'] }
+        
     #
     # Configure functions.
     #
@@ -318,7 +414,7 @@ def build(meta, zpath):
         
         # Main Function
         'MainFunc':    build_main_func(base_conf, bucket_mapping,
-                                       hdlr_conf, sns_topic_arn),
+                                       hdlr_conf, sns_topic_arn, role_main_func),
     })
     
     return obj2yml(sam_config)

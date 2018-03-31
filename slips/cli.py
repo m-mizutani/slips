@@ -208,6 +208,7 @@ class Deploy(Job):
             'aws', 'cloudformation', 'package', '--template-file', yml_file,
             '--s3-bucket', code_bucket, '--output-template-file', sam_file,
         ]
+        logger.info('package command: %s', ' '.join(pkg_cmd))
         if code_prefix:
             pkg_cmd += ['--s3-prefix', code_prefix]
     
@@ -230,10 +231,10 @@ class Deploy(Job):
         #
         deploy_cmd = [
             'aws', 'cloudformation', 'deploy', '--template-file', sam_file,
-            '--stack-name', stack_name,
+            '--stack-name', stack_name, '--capabilities', 'CAPABILITY_IAM',
         ]
         logger.debug('Run: %s', ' '.join(deploy_cmd))
-        
+
         deploy_res = subprocess.run(deploy_cmd, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
         logger.debug('Return code: %d\nSTDOUT: %s\nSTDERR: %s',
