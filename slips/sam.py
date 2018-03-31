@@ -133,9 +133,11 @@ def build_main_func(base, bucket_mapping, handler, sns_topic_arn, role_arn):
     return config
     
 
-def build_reporter(base, processor, sns_topic_arn, dynamodb_table_name):
+def build_reporter(base, processor, sns_topic_arn, dynamodb_table_name,
+                   role_reporter):
     config = copy.deepcopy(FUNC_TEMPLATE)
-    config['Properties']['Role'] = processor['role_arn']['reporter']
+    config['DependsOn'] = 'ErrorTable'
+    config['Properties']['Role'] = role_reporter
     config['Properties']['Handler'] = 'reporter.lambda_handler'
     config['Properties']['Environment']['Variables'] = {
         'ERROR_TABLE': dynamodb_table_name,
@@ -153,6 +155,7 @@ def build_reporter(base, processor, sns_topic_arn, dynamodb_table_name):
 
 def build_drain(base, processor, dynamodb_table_name):
     config = copy.deepcopy(FUNC_TEMPLATE)
+    config['DependsOn'] = 'ErrorTable'
     config['Properties']['Role'] = processor['role_arn']['drain']
     config['Properties']['Handler'] = 'drain.lambda_handler'
     config['Properties']['Environment']['Variables'] = {
@@ -277,7 +280,7 @@ def build_role_main_func(mapping, sns_topic_arn):
                  for b, x in mapping.items() for c in x]
 
     config = copy.deepcopy(ROLE_TEMPLATE)
-    config['Policies'] = [
+    config['Properties']['Policies'] = [
         {
             'PolicyName': 'S3ObjectReadable',
             'PolicyDocument': {
@@ -305,28 +308,26 @@ def build_role_main_func(mapping, sns_topic_arn):
     return config
 
 
-def build_role_reporter():
+def build_role_reporter(dynamodb_arn):
     config = copy.deepcopy(ROLE_TEMPLATE)
-    config['Policies'] = [
+    config['DependsOn'] = 'ErrorTable'
+    config['Properties']['Policies'] = [
         {
-            'PolicyName': 'S3ObjectReadable',
+            'PolicyName': 'DynamoDBWriteable',
             'PolicyDocument': {
                 'Version' : '2012-10-17',
                 'Statement': [ {
                     'Effect': 'Allow',
-                    'Action': ['s3:GetObject'],
-                    'Resource': resources,
-                } ]
-            }
-        },
-        {
-            'PolicyName': 'SNSPublishable',
-            'PolicyDocument': {
-                'Version' : '2012-10-17',
-                'Statement': [ {
-                    'Effect': 'Allow',
-                    'Action': ['sns:Publish'],
-                    'Resource': sns_topic_arn,
+                    "Action": [
+                        'dynamodb:BatchWriteItem',
+                        'dynamodb:PutItem',
+                        'dynamodb:UpdateItem',
+                    ],
+                    "Resource": [
+                        { 'Fn::Sub': [
+                            '${TableARN}*', {'TableARN': dynamodb_arn}
+                        ] },
+                    ]
                 } ]
             }
         },
@@ -365,10 +366,12 @@ def build(meta, zpath):
     #
     # Create DynamoDB table if needed.
     #
-    if 'dynamodb_table_name' in backend:
-        dynamodb_table_name = backend['dynamodb_table_name']
+    if 'dynamodb_arn' in backend:
+        dynamodb_arn = backend['dynamodb_arn']
+        dynamodb_table_name = backend['dynamodb_arn'].split('/')[-1]
     else:
         rsc['ErrorTable'] = build_error_table()
+        dynamodb_arn = { 'Fn::GetAtt': 'ErrorTable.Arn' }
         dynamodb_table_name = { 'Fn::Sub': '${ErrorTable}' }
 
     #
@@ -391,7 +394,7 @@ def build(meta, zpath):
     if 'reporter' in roles_conf:
         role_reporter = roles_conf['reporter']
     else:
-        rsc['ReporterRole'] = build_role_reporter()
+        rsc['ReporterRole'] = build_role_reporter(dynamodb_arn)
         role_reporter = {'Fn::GetAtt' : ['ReporterRole', 'Arn'] }
         
     #
@@ -409,7 +412,7 @@ def build(meta, zpath):
                                            lane_conf.get('slow', {}),
                                            ks_set['EventSlowStream']['arn']),
         'Reporter':    build_reporter(base_conf, backend, sns_topic_arn,
-                                      dynamodb_table_name),
+                                      dynamodb_table_name, role_reporter),
         'Drain':       build_drain(base_conf, backend, dynamodb_table_name),
         
         # Main Function
