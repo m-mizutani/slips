@@ -20,7 +20,7 @@ In your project directory, setup SLIPS by following commands.
 ```bash
 $ virtualenv venv
 $ source venv/bin/activate
-$ pipenv install -e 'git+ssh://git@ghe.ckpd.co/mizutani/slips.git#egg=slips'
+$ pipenv install -e 'git+https://github.com/m-mizutani/slips.git#egg=slips'
 ```
 
 And write your meta config file, and save it as `your_config.yml`
