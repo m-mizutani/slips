@@ -34,36 +34,24 @@ base:
     code_prefix: functions
 
 backend:
-  role_arn:
-    event_pusher: arn:aws:iam::1234xxxxxx:role/LambdaMizutaniSlamEventPusher
-    dispatcher:   arn:aws:iam::1234xxxxxx:role/LambdaMizutaniSlamDispatcher
-    reporter:     arn:aws:iam::1234xxxxxx:role/LambdaMizutaniSlamReporter
-    drain:        arn:aws:iam::1234xxxxxx:role/LambdaMizutaniSlamDrain
   sns_topics:
     - name: SecLogUplaod
       arn: arn:aws:sns:ap-northeast-1:1234xxxxxx:seclog-event
 
 handler:
-  role_arn: arn:aws:iam::1234xxxxxx:role/LambdaMizutaniSlamMain
   path: src/handler.py
   args:
     your_key1: value1
     your_key2: value2
 
 routing:
-  - bucket: mizutani-test
-    prefix: slam2/azure_ad/signinEvents/
-    dest: fast
-  - bucket: mizutani-test
-    prefix: slam2/g_suite/
-    dest: fast
-  - dest: drop
+  - dest: fast
 
 bucket_mapping:
   mizutani-test:
-    - prefix: slam2/azure_ad/signinEvents/
+    - prefix: logs/azure_ad/signinEvents/
       format: [s3-lines, json, azure-ad-event]
-    - prefix: slam2/g_suite/
+    - prefix: logs/g_suite/
       format: [s3-lines, json, g-suite-login]
 ```
 
