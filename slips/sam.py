@@ -136,7 +136,6 @@ def build_main_func(base, bucket_mapping, handler, sns_topic_arn, role_arn):
 def build_reporter(base, processor, sns_topic_arn, dynamodb_table_name,
                    role_reporter):
     config = copy.deepcopy(FUNC_TEMPLATE)
-    config['DependsOn'] = 'ErrorTable'
     config['Properties']['Role'] = role_reporter
     config['Properties']['Handler'] = 'reporter.lambda_handler'
     config['Properties']['Environment']['Variables'] = {
@@ -153,10 +152,9 @@ def build_reporter(base, processor, sns_topic_arn, dynamodb_table_name,
     return config
 
 
-def build_drain(base, processor, dynamodb_table_name):
+def build_drain(base, processor, dynamodb_table_name, role_arn):
     config = copy.deepcopy(FUNC_TEMPLATE)
-    config['DependsOn'] = 'ErrorTable'
-    config['Properties']['Role'] = processor['role_arn']['drain']
+    config['Properties']['Role'] = role_arn
     config['Properties']['Handler'] = 'drain.lambda_handler'
     config['Properties']['Environment']['Variables'] = {
         'ERROR_TABLE': dynamodb_table_name,
@@ -331,7 +329,6 @@ def build_role_event_pusher(ks_set):
 
 def build_role_reporter(dynamodb_arn):
     config = copy.deepcopy(ROLE_TEMPLATE)
-    config['DependsOn'] = 'ErrorTable'
     config['Properties']['Policies'] = [
         {
             'PolicyName': 'DynamoDBWriteable',
@@ -383,6 +380,46 @@ def build_role_dispatcher(ks_set):
                     'Effect': 'Allow',
                     'Action': ['lambda:InvokeFunction'], 
                     'Resource': {'Fn::GetAtt': ['MainFunc', 'Arn']},
+                } ]
+            }
+        },
+    ]
+    
+    return config
+
+
+def build_role_drain(dynamodb_arn, ks_set):
+    config = copy.deepcopy(ROLE_TEMPLATE)
+    config['Properties']['Policies'] = [
+        {
+            'PolicyName': 'KinesisPutRecord',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    'Action': [
+                        'kinesis:PutRecord',
+                        'kinesis:PutRecords'
+                    ],
+                    'Resource': [ks['arn'] for ks in ks_set.values()],
+                } ]
+            }
+        },
+        {
+            'PolicyName': 'DynamoDBWriteable',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    'Action': [
+                        'dynamodb:DeleteItem',
+                        'dynamodb:Scan',
+                    ],
+                    'Resource': [
+                        { 'Fn::Sub': [
+                            '${TableARN}*', {'TableARN': dynamodb_arn}
+                        ] },
+                    ]
                 } ]
             }
         },
@@ -451,6 +488,7 @@ def build(meta, zpath):
         ('reporter',   'ReporterRole',   build_role_reporter(dynamodb_arn)),
         ('dispatcher', 'DispatcherRole', build_role_dispatcher(ks_set)),
         ('event_pusher', 'EventPusherRole', build_role_event_pusher(ks_set)),
+        ('drain', 'DrainRole', build_role_drain(dynamodb_arn, ks_set)),
     ]
     role_arn = {}
     for role_name, logic_name, role_config in role_builders:
@@ -480,7 +518,8 @@ def build(meta, zpath):
                                            role_arn['dispatcher']),
         'Reporter':    build_reporter(base_conf, backend, sns_topic_arn,
                                       dynamodb_table_name, role_arn['reporter']),
-        'Drain':       build_drain(base_conf, backend, dynamodb_table_name),
+        'Drain':       build_drain(base_conf, backend, dynamodb_table_name,
+                                   role_arn['drain']),
         
         # Main Function
         'MainFunc':    build_main_func(base_conf, bucket_mapping,
