@@ -80,13 +80,13 @@ def build_event_pusher(processor, routing, kinesis_stream_fast,
     return config
 
 
-def build_dispatcher(base, backend, lane, kinesis_stream_arn):
+def build_dispatcher(base, backend, lane, kinesis_stream_arn, role_dispatcher):
     config = copy.deepcopy(FUNC_TEMPLATE)
     config['Properties']['Environment']['Variables'] = {
         'FUNC_NAME': { 'Fn::Sub': '${MainFunc}' },
         'DELAY': lane.get('delay', 0),
     }
-    config['Properties']['Role'] = backend['role_arn']['dispatcher']
+    config['Properties']['Role'] = role_dispatcher
     config['Properties']['Handler'] = 'dispatcher.lambda_handler'
     config['Properties']['Events'] = {
         'StreamEvent': {
@@ -260,7 +260,7 @@ def build_kinesis_stream(processor):
 
 
 def get_kinesis_stream(key_name, label, backend):
-    if 'kinesis_stream_fast_arn' in backend:
+    if key_name in backend:
         arn = backend.get(key_name)
         return {
             'config': None,
@@ -336,6 +336,40 @@ def build_role_reporter(dynamodb_arn):
     return config
 
 
+def build_role_dispatcher(ks_set):
+    config = copy.deepcopy(ROLE_TEMPLATE)
+    config['Properties']['Policies'] = [
+        {
+            'PolicyName': 'KinesisReadable',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    "Action": [
+                        'kinesis:GetShardIterator',
+                        'kinesis:GetRecords',
+                        'kinesis:DescribeStream',
+                    ],
+                    "Resource": [ks['arn'] for ks in ks_set.values()],
+                } ]
+            }
+        },
+        {
+            'PolicyName': 'LambdaInvoke',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    "Action": ['lambda:InvokeFunction'], 
+                    "Resource": {'Fn::GetAtt': ['MainFunc', 'Arn']},
+                } ]
+            }
+        },
+    ]
+    
+    return config
+
+
 def build(meta, zpath):
     FUNC_TEMPLATE['Properties']['CodeUri'] = zpath
     base_conf =        meta['base']
@@ -387,7 +421,7 @@ def build(meta, zpath):
         role_main_func = hdlr_conf['role_arn']
     else:
         rsc['MainFuncRole'] = build_role_main_func(bucket_mapping, sns_topic_arn)
-        role_main_func = {'Fn::GetAtt' : ['MainFuncRole', 'Arn'] }
+        role_main_func = {'Fn::GetAtt' : 'MainFuncRole.Arn' }
 
     # Roles
     roles_conf = backend.get('role_arn', {})
@@ -395,7 +429,13 @@ def build(meta, zpath):
         role_reporter = roles_conf['reporter']
     else:
         rsc['ReporterRole'] = build_role_reporter(dynamodb_arn)
-        role_reporter = {'Fn::GetAtt' : ['ReporterRole', 'Arn'] }
+        role_reporter = {'Fn::GetAtt' : 'ReporterRole.Arn'}
+
+    if 'dispatcher' in roles_conf:
+        role_dispatcher = roles_conf['dispatcher']
+    else:
+        rsc['DispatcherRole'] = build_role_dispatcher(ks_set)
+        role_dispatcher = {'Fn::GetAtt' : 'DispatcherRole.Arn' }
         
     #
     # Configure functions.
@@ -407,10 +447,12 @@ def build(meta, zpath):
                                           ks_set['EventSlowStream']['name']),
         'FastDispatcher': build_dispatcher(base_conf, backend,
                                            lane_conf.get('fast', {}),
-                                           ks_set['EventFastStream']['arn']),
+                                           ks_set['EventFastStream']['arn'],
+                                           role_dispatcher),
         'SlowDispatcher': build_dispatcher(base_conf, backend,
                                            lane_conf.get('slow', {}),
-                                           ks_set['EventSlowStream']['arn']),
+                                           ks_set['EventSlowStream']['arn'],
+                                           role_dispatcher),
         'Reporter':    build_reporter(base_conf, backend, sns_topic_arn,
                                       dynamodb_table_name, role_reporter),
         'Drain':       build_drain(base_conf, backend, dynamodb_table_name),
