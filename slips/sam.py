@@ -63,7 +63,7 @@ ROLE_TEMPLATE = {
 
 
 def build_event_pusher(processor, routing, kinesis_stream_fast,
-                       kinesis_stream_slow):
+                       kinesis_stream_slow, role_arn):
     config = copy.deepcopy(FUNC_TEMPLATE)
     
     config['Properties']['Environment']['Variables'] = {
@@ -71,7 +71,7 @@ def build_event_pusher(processor, routing, kinesis_stream_fast,
         'DST_KINESIS_STREAM_SLOW': kinesis_stream_slow,
         'ROUTING_POLICY': json.dumps(routing, separators=(',', ':')),
     }
-    config['Properties']['Role'] = processor['role_arn']['event_pusher']
+    config['Properties']['Role'] = role_arn
     config['Properties']['Handler'] = 'event_pusher.lambda_handler'
     config['Properties']['Events'] = dict([(x['name'], {
         'Type': 'SNS', 'Properties': {'Topic': x['arn']},
@@ -308,6 +308,27 @@ def build_role_main_func(mapping, sns_topic_arn):
     return config
 
 
+def build_role_event_pusher(ks_set):
+    config = copy.deepcopy(ROLE_TEMPLATE)
+    config['Properties']['Policies'] = [
+        {
+            'PolicyName': 'KinesisPutRecord',
+            'PolicyDocument': {
+                'Version' : '2012-10-17',
+                'Statement': [ {
+                    'Effect': 'Allow',
+                    'Action': [
+                        'kinesis:PutRecord',
+                        'kinesis:PutRecords'
+                    ],
+                    'Resource': [ks['arn'] for ks in ks_set.values()],
+                } ]
+            }
+        }
+    ]
+    return config
+
+
 def build_role_reporter(dynamodb_arn):
     config = copy.deepcopy(ROLE_TEMPLATE)
     config['DependsOn'] = 'ErrorTable'
@@ -318,12 +339,12 @@ def build_role_reporter(dynamodb_arn):
                 'Version' : '2012-10-17',
                 'Statement': [ {
                     'Effect': 'Allow',
-                    "Action": [
+                    'Action': [
                         'dynamodb:BatchWriteItem',
                         'dynamodb:PutItem',
                         'dynamodb:UpdateItem',
                     ],
-                    "Resource": [
+                    'Resource': [
                         { 'Fn::Sub': [
                             '${TableARN}*', {'TableARN': dynamodb_arn}
                         ] },
@@ -345,12 +366,12 @@ def build_role_dispatcher(ks_set):
                 'Version' : '2012-10-17',
                 'Statement': [ {
                     'Effect': 'Allow',
-                    "Action": [
+                    'Action': [
                         'kinesis:GetShardIterator',
                         'kinesis:GetRecords',
                         'kinesis:DescribeStream',
                     ],
-                    "Resource": [ks['arn'] for ks in ks_set.values()],
+                    'Resource': [ks['arn'] for ks in ks_set.values()],
                 } ]
             }
         },
@@ -360,8 +381,8 @@ def build_role_dispatcher(ks_set):
                 'Version' : '2012-10-17',
                 'Statement': [ {
                     'Effect': 'Allow',
-                    "Action": ['lambda:InvokeFunction'], 
-                    "Resource": {'Fn::GetAtt': ['MainFunc', 'Arn']},
+                    'Action': ['lambda:InvokeFunction'], 
+                    'Resource': {'Fn::GetAtt': ['MainFunc', 'Arn']},
                 } ]
             }
         },
@@ -425,17 +446,20 @@ def build(meta, zpath):
 
     # Roles
     roles_conf = backend.get('role_arn', {})
-    if 'reporter' in roles_conf:
-        role_reporter = roles_conf['reporter']
-    else:
-        rsc['ReporterRole'] = build_role_reporter(dynamodb_arn)
-        role_reporter = {'Fn::GetAtt' : 'ReporterRole.Arn'}
 
-    if 'dispatcher' in roles_conf:
-        role_dispatcher = roles_conf['dispatcher']
-    else:
-        rsc['DispatcherRole'] = build_role_dispatcher(ks_set)
-        role_dispatcher = {'Fn::GetAtt' : 'DispatcherRole.Arn' }
+    role_builders = [
+        ('reporter',   'ReporterRole',   build_role_reporter(dynamodb_arn)),
+        ('dispatcher', 'DispatcherRole', build_role_dispatcher(ks_set)),
+        ('event_pusher', 'EventPusherRole', build_role_event_pusher(ks_set)),
+    ]
+    role_arn = {}
+    for role_name, logic_name, role_config in role_builders:
+        if role_name in roles_conf:
+            role_arn[role_name] = roles_conf[role_name]
+        else:
+            rsc[logic_name] = role_config
+            role_arn[role_name] = {'Fn::GetAtt' : '{}.Arn'.format(logic_name)}
+
         
     #
     # Configure functions.
@@ -444,17 +468,18 @@ def build(meta, zpath):
         # Backend Functions
         'EventPusher': build_event_pusher(backend, routing,
                                           ks_set['EventFastStream']['name'],
-                                          ks_set['EventSlowStream']['name']),
+                                          ks_set['EventSlowStream']['name'],
+                                          role_arn['event_pusher']),
         'FastDispatcher': build_dispatcher(base_conf, backend,
                                            lane_conf.get('fast', {}),
                                            ks_set['EventFastStream']['arn'],
-                                           role_dispatcher),
+                                           role_arn['dispatcher']),
         'SlowDispatcher': build_dispatcher(base_conf, backend,
                                            lane_conf.get('slow', {}),
                                            ks_set['EventSlowStream']['arn'],
-                                           role_dispatcher),
+                                           role_arn['dispatcher']),
         'Reporter':    build_reporter(base_conf, backend, sns_topic_arn,
-                                      dynamodb_table_name, role_reporter),
+                                      dynamodb_table_name, role_arn['reporter']),
         'Drain':       build_drain(base_conf, backend, dynamodb_table_name),
         
         # Main Function
