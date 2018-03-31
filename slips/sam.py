@@ -434,7 +434,7 @@ def build(meta, zpath):
     backend =          meta.get('backend', {})
     hdlr_conf =        meta['handler']
     bucket_mapping =   meta['bucket_mapping']
-    routing =          meta['routing']
+    routing =          meta.get('routing', [{'dest': 'fast'}])
     lane_conf =        backend.get('lane', {})
     
     sam_config = copy.deepcopy(SAM_TEMPLATE)

@@ -44,9 +44,6 @@ handler:
     your_key1: value1
     your_key2: value2
 
-routing:
-  - dest: fast
-
 bucket_mapping:
   mizutani-test:
     - prefix: logs/azure_ad/signinEvents/
