@@ -18,7 +18,7 @@ from . import sam
 
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+
 
 BASE_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 REL_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -190,6 +190,66 @@ class Drain(Job):
         logger.info('Return value: %s', res['Payload'].read())
         
 
+class Limit(Job):
+    def exec(self, args, meta):
+        lanes = {
+            'fast': 'FastDispatcher',
+            'slow': 'SlowDispatcher',
+        }
+
+        func_logic_name = lanes[args.lane_name]
+        func_resrc = Job._get_resource_info(meta, func_logic_name)
+        func_name = func_resrc['PhysicalResourceId']
+        logger.info('Physical Function Name: %s', func_name)
+
+        client = boto3.client('lambda')
+
+        # ---------------------------------
+        # Update DELAY environment variable
+        #
+        func = client.get_function_configuration(FunctionName=func_name)
+        env_vars = func['Environment']['Variables']
+        if hasattr(args, 'delay') and args.delay is not None:
+            print('delay:     ', env_vars['DELAY'], '->', args.delay)
+            env_vars['DELAY'] = str(args.delay)
+            env = {'Variables': env_vars}
+            logger.info('New env vars: %s', json.dumps(env, indent=4))
+            r = client.update_function_configuration(FunctionName=func_name,
+                                                     Environment=env)
+            if r['ResponseMetadata']['HTTPStatusCode'] not in [200, 202]:
+                logger.error('Fail to update environment vairable DELAY: %s', r)
+                raise Exception('Failt to update DELAY parameter')
+        else:
+            print('delay:     ', env_vars['DELAY'])
+
+        # ---------------------------------
+        # Update BatchSize
+        #
+        ev_src_res = client.list_event_source_mappings(FunctionName=func_name)
+        ev_src_list = ev_src_res['EventSourceMappings']
+        import pprint
+        # pprint.pprint(ev_src_list)
+        
+        if len(ev_src_list) != 1:
+            logger.error('Invalid event source mapping: %s', ev_src_list)
+            raise Exception('Number of event source have to be one')
+
+        ev_src = ev_src_list[0]
+
+        batch_size = ev_src['BatchSize']
+        if hasattr(args, 'batch_size') and args.batch_size is not None:
+            print('batch_size:', batch_size, '->', args.batch_size)
+            r = client.update_event_source_mapping(UUID=ev_src['UUID'],
+                                                   BatchSize=args.batch_size)
+            if r['ResponseMetadata']['HTTPStatusCode'] not in [200, 202]:
+                logger.error('Fail to update BatchSize: %s', r)
+                raise Exception('Failt to update BatchSize')
+        else:
+            print('batch_size:', batch_size)
+            
+        
+        
+        
 # -------------------------------------------------------------------
 # Deployment section
 #
@@ -281,9 +341,10 @@ class Deploy(Job):
         else:
             Deploy.deploy(meta['stack_name'], sam_file)
 
-        
 
 class Task:
+    DEFAULT_CONFIG_PATH = './config.yml'
+    
     def __init__(self):
         logging.basicConfig(format='%(asctime)s.%(msecs)03d %(levelname)s '
                             '[%(filename)s:%(lineno)d] %(message)s',
@@ -291,8 +352,9 @@ class Task:
 
     def run(self, argv):
         psr = argparse.ArgumentParser()
-        psr.add_argument('-v', '--verbose', action='store_true')
-        psr.add_argument('-c', '--meta-file', default='config.yml')
+        psr.add_argument('-v', '--verbose', action='count', default=0,
+                         help='v=info, vv=debug')
+        psr.add_argument('-c', '--meta-file', default=None)
 
         subpsr = psr.add_subparsers()
 
@@ -311,16 +373,35 @@ class Task:
         # Show Errors
         psr_errors = subpsr.add_parser('errors', help='Show errors')
         psr_errors.set_defaults(handler=ShowErrors)
+        psr_errors.add_argument('-s', '--stack-name')
 
         # -----------------------------
         # Drain
         psr_drain = subpsr.add_parser('drain', help='Drain error items for retry')
         psr_drain.set_defaults(handler=Drain)
-        
+        psr_drain.add_argument('-s', '--stack-name')
+
+        # -----------------------------
+        # Limit
+        psr_limit = subpsr.add_parser('limit', help='Set delay and batch_size')
+        psr_limit.set_defaults(handler=Limit)
+        psr_limit.add_argument('lane_name')
+        psr_limit.add_argument('-s', '--stack-name')
+        psr_limit.add_argument('-b', '--batch-size', type=int)
+        psr_limit.add_argument('-d', '--delay', type=int)
+
         args = psr.parse_args(argv)
-        
-        meta = yaml.load(open(args.meta_file, 'rt'))
-        if args.verbose:
+
+        if args.meta_file:
+            meta = yaml.load(open(args.meta_file, 'rt'))
+        elif hasattr(args, 'stack_name') and args.stack_name:
+            meta = {'stack_name': args.stack_name}
+        else:
+            meta = yaml.load(open(Task.DEFAULT_CONFIG_PATH, 'rt'))
+
+        if args.verbose == 1:
+            logger.setLevel(logging.INFO)
+        elif args.verbose >= 2:
             logger.setLevel(logging.DEBUG)
 
         if hasattr(args, 'handler'):
@@ -328,4 +409,4 @@ class Task:
         else:
             psr.print_help()
             
-        logger.info('DOOOOOOOOOOONEEEEEE!')
+        logger.info('exit')
