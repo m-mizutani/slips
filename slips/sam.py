@@ -428,6 +428,80 @@ def build_role_drain(dynamodb_arn, ks_set):
     return config
 
 
+def build_dashboard(stack_name):
+    WIDGET_TEMPLATE = {
+        'type': 'metric',
+        'width': 12,
+        'height': 6,
+        'properties': {
+            'title': '',
+            'view': 'timeSeries',
+            'stacked': False,
+            'metrics': [],
+            'region': 'ap-northeast-1'
+        },
+    }
+    
+    def make(title, metrics):
+        c = copy.deepcopy(WIDGET_TEMPLATE)
+        c['properties']['title'] = title
+        c['properties']['metrics'] = metrics
+        return c
+        
+    func_name_list = [
+        'EventPusher',
+        'FastDispatcher',
+        'SlowDispatcher',
+        'Reporter',
+        'Drain',
+    ]
+
+    error_metrics = make('Backend Error', [
+        ['AWS/Lambda', 'Errors', 'FunctionName', '${{{}}}'.format(fn), 
+         {'stat': 'Sum', 'period': 60}]
+        for fn in func_name_list])
+
+    invocation_metrics = make('Backend Invocations', [
+        ['AWS/Lambda', 'Invocations', 'FunctionName',
+         '${{{}}}'.format(fn), {'stat': 'Sum', 'period': 60}]
+        for fn in func_name_list])
+
+    main_invocation_metrics = make('Main Invocations', [
+        ['AWS/Lambda', 'Invocations', 'FunctionName',
+         '${MainFunc}', {'stat': 'Sum', 'period': 60}]
+    ])
+    
+    main_error_metrics = make('Main Error', [
+        ['AWS/Lambda', 'Errors', 'FunctionName',
+         '${MainFunc}', {'stat': 'Sum', 'period': 60}]
+    ])
+
+    main_duration_metrics = make('Main Duration', [
+        ['AWS/Lambda', 'Duration', 'FunctionName',
+         '${MainFunc}', {'stat': 'Minimum', 'period': 60}],
+        ['AWS/Lambda', 'Duration', 'FunctionName',
+         '${MainFunc}', {'stat': 'Average', 'period': 60}],
+        ['AWS/Lambda', 'Duration', 'FunctionName',
+         '${MainFunc}', {'stat': 'Maximum', 'period': 60}],
+    ])
+    
+    board_config = {
+        'widgets': [invocation_metrics, error_metrics, main_invocation_metrics,
+                    main_error_metrics, main_duration_metrics],
+    }
+
+    config = {
+        'Type': 'AWS::CloudWatch::Dashboard',
+        'Properties': {
+            'DashboardName': '{}-dashboard'.format(stack_name),
+            'DashboardBody': {
+                'Fn::Sub': json.dumps(board_config),
+            }
+        }
+    }
+    return config
+
+    
 def build(meta, zpath):
     FUNC_TEMPLATE['Properties']['CodeUri'] = zpath
     base_conf =        meta['base']
@@ -524,6 +598,7 @@ def build(meta, zpath):
         # Main Function
         'MainFunc':    build_main_func(base_conf, bucket_mapping,
                                        hdlr_conf, sns_topic_arn, role_main_func),
+        'SlipsDashboard':   build_dashboard(meta['stack_name']),
     })
     
     return obj2yml(sam_config)
