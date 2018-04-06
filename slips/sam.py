@@ -438,7 +438,12 @@ def build_dashboard(stack_name):
             'view': 'timeSeries',
             'stacked': False,
             'metrics': [],
-            'region': 'ap-northeast-1'
+            'region': 'ap-northeast-1',
+            'yAxis': {
+                'left': {
+                    'min': 0
+                }
+            },
         },
     }
     
@@ -485,9 +490,18 @@ def build_dashboard(stack_name):
          '${MainFunc}', {'stat': 'Maximum', 'period': 60}],
     ])
     
+    main_conc_metrics = make('Main ConcurrentExecutions', [
+        ['AWS/Lambda', 'ConcurrentExecutions', 'FunctionName',
+         '${MainFunc}', {'stat': 'Minimum', 'period': 60}],
+        ['AWS/Lambda', 'ConcurrentExecutions', 'FunctionName',
+         '${MainFunc}', {'stat': 'Average', 'period': 60}],
+        ['AWS/Lambda', 'ConcurrentExecutions', 'FunctionName',
+         '${MainFunc}', {'stat': 'Maximum', 'period': 60}],
+    ])
+    
     board_config = {
         'widgets': [invocation_metrics, error_metrics, main_invocation_metrics,
-                    main_error_metrics, main_duration_metrics],
+                    main_error_metrics, main_duration_metrics, main_conc_metrics],
     }
 
     config = {
@@ -598,7 +612,7 @@ def build(meta, zpath):
         # Main Function
         'MainFunc':    build_main_func(base_conf, bucket_mapping,
                                        hdlr_conf, sns_topic_arn, role_main_func),
-        'SlipsDashboard':   build_dashboard(meta['stack_name']),
+         'SlipsDashboard':   build_dashboard(meta['stack_name']),
     })
     
     return obj2yml(sam_config)
