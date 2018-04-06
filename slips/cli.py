@@ -16,13 +16,13 @@ import tempfile
 import subprocess
 
 from . import sam
+import slips.main
 
 
 logger = logging.getLogger()
 
 
 BASE_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-REL_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def obj2yml(obj):
@@ -192,14 +192,15 @@ class ShowErrors(Job):
     
     
 class GetError(Job):
-    def exec(self, args, meta):
+    @staticmethod
+    def get_error_item(meta, request_id):
         resource = Job._get_resource_info(meta, 'ErrorTable')
         table_name = resource['PhysicalResourceId']
         logger.debug('Physical Table Name: %s', table_name)
 
         table_key = {
             'request_id': {
-                'S': args.request_id,
+                'S': request_id,
             }
         }
         dynamodb = boto3.client('dynamodb')
@@ -210,6 +211,19 @@ class GetError(Job):
             raise Exception('Fail to query DynamoDB')
         
         item = table_res['Item']
+        return item
+            
+    @staticmethod
+    def setup_parser(psr):
+        psr.add_argument('request_id')
+        psr.add_argument('-s', '--stack-name')
+        psr.add_argument('-f', '--output-format',
+                         choices=['json', 'cjson', 'text'], default='text')
+        psr.add_argument('-o', '--output', type=argparse.FileType('w'),
+                         default=sys.stdout)
+    
+    def exec(self, args, meta):
+        item = GetError.get_error_item(meta, args.request_id)
         argument = json.loads(item['argument']['S'])
         request_id = item['request_id']['S']
 
@@ -223,19 +237,32 @@ class GetError(Job):
         elif args.output_format == 'cjson':
             ofd.write(json.dumps(argument, separators=(',', ':')))
 
-                
+
+class RunTest(Job):
+    def exec(self, args, meta):
+        if hasattr(args, 'request_id'):
+            item = GetError.get_error_item(meta, args.request_id)
+            event = json.loads(item['argument']['S'])
+        elif hasattr(args, 'request_id'):
+            event = json.load(args.test_data)
+        else:
+            raise Exception('test command requires data option (-d or -r)')
+            
+        test_args = {
+            'HANDLER_PATH': meta['handler']['path'],
+            'HANDLER_ARGS': json.dumps(meta['handler']['args']),
+            'BUCKET_MAPPING': json.dumps(meta['bucket_mapping']),
+        }
+        slips.main.main(test_args, event)
+        return
+        
     @staticmethod
     def setup_parser(psr):
-        psr.add_argument('request_id')
-        psr.add_argument('-s', '--stack-name')
-        psr.add_argument('-f', '--output-format',
-                         choices=['json', 'cjson', 'text'], default='text')
-        psr.add_argument('-o', '--output', type=argparse.FileType('w'),
-                         default=sys.stdout)
-
+        psr.add_argument('-d', '--test-data', type=argparse.FileType('r'))
+        psr.add_argument('-r', '--request-id')
         return
-
-
+    
+    
 class Drain(Job):
     def exec(self, args, meta):
         resource = Job._get_resource_info(meta, 'Drain')
@@ -447,6 +474,7 @@ class Task:
             ('error',  'Show error detail', GetError),
             ('drain',  'Drain error item to retry', Drain),
             ('limit',  'Set delay and batch_size', Limit),
+            ('test',   'Test', RunTest),
         ]
 
         for cmd, descr, job in jobs:
