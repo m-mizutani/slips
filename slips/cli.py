@@ -7,6 +7,7 @@ import io
 import boto3
 import base64
 import os
+import sys
 import zipfile
 from functools import reduce
 import argparse
@@ -125,6 +126,10 @@ class Job(abc.ABC):
     def exec(self, args, meta):
         pass
 
+    @abc.abstractmethod
+    def setup_parser(psr):
+        pass
+
     @staticmethod
     def _get_resource_info(meta, logical_name):
         cfn = boto3.client('cloudformation')
@@ -149,6 +154,10 @@ class Package(Job):
         os.close(tmp_fd)
         pack_zip_file(pkg_file, args.root_dir, args.src_dir)
         return pkg_file
+
+    @staticmethod
+    def setup_parser(psr):
+        return
     
 
 class ShowErrors(Job):
@@ -161,7 +170,6 @@ class ShowErrors(Job):
         table_res = dynamodb.scan(TableName=table_name)
 
         logger.info('Total number of error items: %s', table_res['Count'])
-        import pprint
 
         rows = []
         for item in table_res['Items']:
@@ -177,7 +185,57 @@ class ShowErrors(Job):
                       ''.format(arg['event_time'], req_id, arg['bucket_name'],
                                 arg['object_key'], arg['object_size']))
 
+    @staticmethod
+    def setup_parser(psr):
+        psr.add_argument('-s', '--stack-name')
+        return
+    
+    
+class GetError(Job):
+    def exec(self, args, meta):
+        resource = Job._get_resource_info(meta, 'ErrorTable')
+        table_name = resource['PhysicalResourceId']
+        logger.debug('Physical Table Name: %s', table_name)
+
+        table_key = {
+            'request_id': {
+                'S': args.request_id,
+            }
+        }
+        dynamodb = boto3.client('dynamodb')
+        table_res = dynamodb.get_item(TableName=table_name, Key=table_key)
+
+        if table_res['ResponseMetadata']['HTTPStatusCode'] != 200:
+            logger.error('DynamoDB error: %s', table_res)
+            raise Exception('Fail to query DynamoDB')
         
+        item = table_res['Item']
+        argument = json.loads(item['argument']['S'])
+        request_id = item['request_id']['S']
+
+        ofd = args.output
+        if args.output_format == 'text':
+            ofd.write('RequestID:{}\n'.format(request_id))
+            ofd.write('Argument:\n{}\n'.format(json.dumps(argument, indent=4)))
+        elif args.output_format == 'json':
+            ofd.write(json.dumps(argument, indent=4))
+            ofd.write('\n')
+        elif args.output_format == 'cjson':
+            ofd.write(json.dumps(argument, separators=(',', ':')))
+
+                
+    @staticmethod
+    def setup_parser(psr):
+        psr.add_argument('request_id')
+        psr.add_argument('-s', '--stack-name')
+        psr.add_argument('-f', '--output-format',
+                         choices=['json', 'cjson', 'text'], default='text')
+        psr.add_argument('-o', '--output', type=argparse.FileType('w'),
+                         default=sys.stdout)
+
+        return
+
+
 class Drain(Job):
     def exec(self, args, meta):
         resource = Job._get_resource_info(meta, 'Drain')
@@ -189,6 +247,11 @@ class Drain(Job):
         logger.debug('Result: %s', res)
         logger.info('Return value: %s', res['Payload'].read())
         
+    @staticmethod
+    def setup_parser(psr):
+        psr.add_argument('-s', '--stack-name')
+        return
+
 
 class Limit(Job):
     def exec(self, args, meta):
@@ -247,7 +310,13 @@ class Limit(Job):
         else:
             print('batch_size:', batch_size)
             
-        
+    @staticmethod
+    def setup_parser(psr):
+        psr.add_argument('lane_name')
+        psr.add_argument('-s', '--stack-name')
+        psr.add_argument('-b', '--batch-size', type=int)
+        psr.add_argument('-d', '--delay', type=int)
+        return
         
         
 # -------------------------------------------------------------------
@@ -342,6 +411,16 @@ class Deploy(Job):
         else:
             Deploy.deploy(meta['stack_name'], sam_file)
 
+    @staticmethod
+    def setup_parser(psr):
+        psr.add_argument('-p', '--package-file')
+        psr.add_argument('-y', '--generated-sam-yaml')
+        psr.add_argument('-d', '--root-dir', default=BASE_DIR)
+        psr.add_argument('-s', '--src-dir', default='./src',
+                         help='Your source directory')
+        psr.add_argument('--dry-run', action='store_true')
+        return
+
 
 class Task:
     DEFAULT_CONFIG_PATH = './config.yml'
@@ -352,6 +431,9 @@ class Task:
                             datefmt='%Y-%m-%d %H:%M:%S')
 
     def run(self, argv):
+        #
+        # Configure argument parser.
+        #
         psr = argparse.ArgumentParser()
         psr.add_argument('-v', '--verbose', action='count', default=0,
                          help='v=info, vv=debug')
@@ -359,38 +441,22 @@ class Task:
 
         subpsr = psr.add_subparsers()
 
-        # -----------------------------
-        # Deploy
-        psr_deploy = subpsr.add_parser('deploy', help='Deploy CFn stack')
-        psr_deploy.add_argument('-p', '--package-file')
-        psr_deploy.add_argument('-y', '--generated-sam-yaml')
-        psr_deploy.add_argument('-d', '--root-dir', default=BASE_DIR)
-        psr_deploy.add_argument('-s', '--src-dir', default='./src',
-                                help='Your source directory')
-        psr_deploy.add_argument('--dry-run', action='store_true')
-        psr_deploy.set_defaults(handler=Deploy)
+        jobs = [
+            ('deploy', 'Deploy CFn stack', Deploy),
+            ('errors', 'Show error list', ShowErrors),
+            ('error',  'Show error detail', GetError),
+            ('drain',  'Drain error item to retry', Drain),
+            ('limit',  'Set delay and batch_size', Limit),
+        ]
 
-        # -----------------------------
-        # Show Errors
-        psr_errors = subpsr.add_parser('errors', help='Show errors')
-        psr_errors.set_defaults(handler=ShowErrors)
-        psr_errors.add_argument('-s', '--stack-name')
+        for cmd, descr, job in jobs:
+            jobpsr = subpsr.add_parser(cmd, help=descr)
+            jobpsr.set_defaults(handler=job)
+            job.setup_parser(jobpsr)
 
-        # -----------------------------
-        # Drain
-        psr_drain = subpsr.add_parser('drain', help='Drain error items for retry')
-        psr_drain.set_defaults(handler=Drain)
-        psr_drain.add_argument('-s', '--stack-name')
-
-        # -----------------------------
-        # Limit
-        psr_limit = subpsr.add_parser('limit', help='Set delay and batch_size')
-        psr_limit.set_defaults(handler=Limit)
-        psr_limit.add_argument('lane_name')
-        psr_limit.add_argument('-s', '--stack-name')
-        psr_limit.add_argument('-b', '--batch-size', type=int)
-        psr_limit.add_argument('-d', '--delay', type=int)
-
+        #
+        # Parse argumnets.
+        #
         args = psr.parse_args(argv)
 
         if args.meta_file:
