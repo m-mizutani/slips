@@ -115,6 +115,8 @@ class S3Lines(Spout):
                 logger.error(e)
                 logger.error('Decoding error: %s', raw)
 
+        os.remove(fpath)
+
 
 class S3TextFile(Spout):
     def run(self, s3_bucket, s3_key):
@@ -126,6 +128,7 @@ class S3TextFile(Spout):
 
         meta = MetaData()
         self.emit(meta, {'message': data})
+        os.remove(fpath)
 
 
 # --------------------------------------------------------
