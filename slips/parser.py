@@ -131,6 +131,11 @@ class S3TextFile(Spout):
         os.remove(fpath)
 
 
+class Ignore(Spout):
+    def run(self, s3_bucket, s3_key):
+        return # Nothing to do
+
+
 # --------------------------------------------------------
 # Parser
 # --------------------------------------------------------
@@ -422,6 +427,8 @@ class Stream:
         'azure-ad-event':   AzureAdEvent,
         'cylance':          CylanceEvent,
         'ecs-hako':         EcsHako,
+        # Special task
+        'ignore':           Ignore,
     }
 
     def __init__(self, args):
