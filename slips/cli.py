@@ -14,6 +14,7 @@ import argparse
 import logging
 import tempfile
 import subprocess
+import copy
 
 from . import sam
 import slips.main
@@ -247,10 +248,17 @@ class RunTest(Job):
             event = json.load(args.test_data)
         else:
             raise Exception('test command requires data option (-d or -r)')
+
+        hdlr_args = copy.deepcopy(meta['handler']['args'])
+
+        if args.arguments:
+            ow_args = yaml.load(open(args.arguments))
+            print(ow_args)
+            hdlr_args.update(ow_args)
             
         test_args = {
             'HANDLER_PATH': meta['handler']['path'],
-            'HANDLER_ARGS': json.dumps(meta['handler']['args']),
+            'HANDLER_ARGS': json.dumps(hdlr_args),
             'BUCKET_MAPPING': json.dumps(meta['bucket_mapping']),
         }
         slips.main.main(test_args, event)
@@ -260,6 +268,7 @@ class RunTest(Job):
     def setup_parser(psr):
         psr.add_argument('-d', '--test-data', type=argparse.FileType('r'))
         psr.add_argument('-r', '--request-id')
+        psr.add_argument('-a', '--arguments', help='Arguments to overwrite')
         return
     
     
