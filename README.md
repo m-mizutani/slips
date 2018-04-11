@@ -127,12 +127,12 @@ Argument:
 ]
 ```
 
-### Test run with error item
+### Test run at local with error item
 
-`test` command is avaiable to run test with an argument from stored error in ErrorTable. You need to specify `request_id` with `-r` option.
+`local` command is avaiable to run test with an argument from stored error in ErrorTable. You need to specify `request_id` with `-r` option.
 
 ```bash
-$ slips -c your_config.yml test -r 2a45219e-336f-11e8-a549-af410f2364a8
+$ slips -c your_config.yml local -r 2a45219e-336f-11e8-a549-af410f2364a8
 2018-04-06 09:37:12.334 INFO [main.py:59] Event: [
     {
         "aws_region": "ap-northeast-1",
@@ -169,6 +169,20 @@ $ slips -c your_config.yml drain
 ```
 
 Then, error items will be put into Kinesis Stream again (Fast-lane or Slow-lane) and deleted from ErrorTable.
+
+### Generate sample data
+
+```bash
+$ slips -c your_config.yml sample -o sample_data.json
+```
+
+This command generate `sample_dta.json` including JSON data from Kinesis Stream. The command scan S3 bucket and find object key that can be used for sample run. After that, you can run `local` command.
+
+```bash
+$ slips -c your_config.yml local -d sample_data.json
+```
+
+Then you can confirm not only a result of your program but also correctness of parser setting in `bucket_mapping`.
 
 
 Test for only SLIPS
