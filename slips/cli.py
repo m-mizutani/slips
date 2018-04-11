@@ -15,6 +15,7 @@ import logging
 import tempfile
 import subprocess
 import copy
+import datetime
 
 from . import sam
 import slips.main
@@ -239,12 +240,12 @@ class GetError(Job):
             ofd.write(json.dumps(argument, separators=(',', ':')))
 
 
-class RunTest(Job):
+class RunLocal(Job):
     def exec(self, args, meta):
-        if hasattr(args, 'request_id'):
+        if args.request_id:
             item = GetError.get_error_item(meta, args.request_id)
             event = json.loads(item['argument']['S'])
-        elif hasattr(args, 'request_id'):
+        elif args.test_data:
             event = json.load(args.test_data)
         else:
             raise Exception('test command requires data option (-d or -r)')
@@ -253,7 +254,6 @@ class RunTest(Job):
 
         if args.arguments:
             ow_args = yaml.load(open(args.arguments))
-            print(ow_args)
             hdlr_args.update(ow_args)
             
         test_args = {
@@ -270,8 +270,50 @@ class RunTest(Job):
         psr.add_argument('-r', '--request-id')
         psr.add_argument('-a', '--arguments', help='Arguments to overwrite')
         return
-    
-    
+
+
+class GenSample(Job):
+    def exec(self, args, meta):
+        s3 = boto3.client('s3')
+        stream = Job._get_resource_info(meta, 'EventFastStream')
+        print(stream)
+        now = datetime.datetime.utcnow()
+        
+        def to_sample(bucket, prefix):
+            res = s3.list_objects_v2(Bucket=bucket, Prefix=prefix,
+                                     MaxKeys=args.max_keys)
+            contents = [x for x in res['Contents'] if x['Size'] >= args.min_size]
+            if not contents:
+                raise Exception('No appropriate S3 object for sample data')
+
+            c = contents[0]
+            return {
+                'event_time': now.strftime('%Y-%m-%dT%H:%M:%S.000Z'),
+                'event_name': 'ObjectCreated:Put',
+                'bucket_name': bucket,
+                'bucket_arn': 'arn:aws:s3:::{}'.format(bucket),
+                'object_key': c['Key'],
+                'object_size': c['Size'],
+                'object_etag': c['ETag'].strip('"'),
+                'dest_stream': stream['PhysicalResourceId'],
+            }
+
+        sample_data = []
+        for s3_bucket, entries in meta['bucket_mapping'].items():
+            sample_data += [to_sample(s3_bucket, e['prefix']) for e in entries]
+
+        args.output.write(json.dumps(sample_data, indent=4))
+        
+    @staticmethod
+    def setup_parser(psr):
+        psr.add_argument('-o', '--output', type=argparse.FileType('w'),
+                         default=sys.stdout)
+        psr.add_argument('-k', '--max-keys', type=int, default=5)
+        psr.add_argument('-m', '--min-size', type=int, default=100,
+                         help='Minimum size of S3 object for sample data')
+        return
+
+
 class Drain(Job):
     def exec(self, args, meta):
         resource = Job._get_resource_info(meta, 'Drain')
@@ -483,7 +525,8 @@ class Task:
             ('error',  'Show error detail', GetError),
             ('drain',  'Drain error item to retry', Drain),
             ('limit',  'Set delay and batch_size', Limit),
-            ('test',   'Test', RunTest),
+            ('local',  'Run at local', RunLocal),
+            ('sample', 'Generate sample data', GenSample),
         ]
 
         for cmd, descr, job in jobs:
