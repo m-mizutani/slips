@@ -253,6 +253,17 @@ class CylanceEvent(Parser):
         self.emit(meta, data)
 
 
+class CylanceThreat(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        dt_txt = data.get('datetime')
+        if dt_txt:
+            dt = datetime.datetime.strptime(dt_txt[:19], '%Y-%m-%dT%H:%M:%S')
+            meta.timestamp = dt.timestamp()
+
+        meta.tag = 'cylance.threat'
+        self.emit(meta, data)
+
+
 class AwsCloudtrailEvent(Parser):
     def recv(self, meta: MetaData, data: dict):
         msg = data.get('message')
@@ -426,6 +437,8 @@ class Stream:
         'azure-ad-audit':   AzureAdAudit,
         'azure-ad-event':   AzureAdEvent,
         'cylance':          CylanceEvent,
+        'cylance-event':    CylanceEvent,
+        'cylance-threat':   CylanceThreat,
         'ecs-hako':         EcsHako,
         # Special task
         'ignore':           Ignore,
