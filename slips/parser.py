@@ -115,6 +115,8 @@ class S3Lines(Spout):
                 logger.error(e)
                 logger.error('Decoding error: %s', raw)
 
+        os.remove(fpath)
+
 
 class S3TextFile(Spout):
     def run(self, s3_bucket, s3_key):
@@ -126,6 +128,12 @@ class S3TextFile(Spout):
 
         meta = MetaData()
         self.emit(meta, {'message': data})
+        os.remove(fpath)
+
+
+class Ignore(Spout):
+    def run(self, s3_bucket, s3_key):
+        return # Nothing to do
 
 
 # --------------------------------------------------------
@@ -242,6 +250,17 @@ class CylanceEvent(Parser):
             meta.timestamp = dt.timestamp()
 
         meta.tag = 'cylance.event'
+        self.emit(meta, data)
+
+
+class CylanceThreat(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        dt_txt = data.get('datetime')
+        if dt_txt:
+            dt = datetime.datetime.strptime(dt_txt[:19], '%Y-%m-%dT%H:%M:%S')
+            meta.timestamp = dt.timestamp()
+
+        meta.tag = 'cylance.threat'
         self.emit(meta, data)
 
 
@@ -418,7 +437,11 @@ class Stream:
         'azure-ad-audit':   AzureAdAudit,
         'azure-ad-event':   AzureAdEvent,
         'cylance':          CylanceEvent,
+        'cylance-event':    CylanceEvent,
+        'cylance-threat':   CylanceThreat,
         'ecs-hako':         EcsHako,
+        # Special task
+        'ignore':           Ignore,
     }
 
     def __init__(self, args):

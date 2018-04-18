@@ -18,13 +18,11 @@ class FormatError(Exception):
 
 
 def load_handlers(fpath):
-    # ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-    # full_path = os.path.join(ROOT_DIR, fpath)
     full_path = os.path.abspath(fpath)
     mod_name = os.path.splitext(fpath)[0].replace('/', '.').lstrip('.')
 
     logger.info('Loading handler code from %s as %s', full_path, mod_name)
-
+    sys.path.append(os.path.dirname(full_path))
     src_file = imm.SourceFileLoader(mod_name, full_path)
     mod = src_file.load_module()
     handlers = [m[1]() for m in inspect.getmembers(mod)

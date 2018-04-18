@@ -3,7 +3,7 @@ import botocore
 import yaml
 import os
 import json
-
+import gzip
 
 def s3_object_size(s3_bucket, s3_key):
     client = boto3.client('s3')
@@ -20,16 +20,26 @@ def setup(hdlr_path, hdlr_args, parsers, dpath, suffix=None):
     config = yaml.load(open(CONFIG_PATH))
 
     if suffix is None:
-        suffix = dpath
+        suffix = os.path.normpath(dpath)
     
     s3_bucket = config['s3']['bucket']
     s3_prefix = config['s3']['prefix']
     s3_key = os.path.normpath('{}{}'.format(s3_prefix, suffix))
 
-    s3_size = s3_object_size(s3_bucket, s3_key)
+    if not suffix.endswith('.gz'):
+        s3_key += '.gz'
+
+    if not os.environ.get('SLIPS_TEST_FORCE_UPLOAD'):
+        s3_size = s3_object_size(s3_bucket, s3_key)
+    else:
+        s3_size = None
+        
     if not s3_size:
         client = boto3.client('s3')
         data = open(dpath, 'rb').read()
+        if not suffix.endswith('.gz'):
+            data = gzip.compress(data)
+            
         client.put_object(Bucket=s3_bucket, Key=s3_key, Body=data)
         s3_size = len(data)
         
