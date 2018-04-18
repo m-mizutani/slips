@@ -14,7 +14,6 @@ logger.setLevel(logging.INFO)
 
 def routing(ev, policies, routes):
     for policy in policies:
-        logger.info('%s for %s', policy, ev)
         if 'bucket' in policy and policy['bucket'] != ev['bucket_name']:
             continue
         if 'prefix' in policy and not ev['object_key'].startswith(policy['prefix']):
