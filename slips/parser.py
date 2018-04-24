@@ -347,6 +347,18 @@ class Kea(Parser):
         self.emit(meta, data)
 
 
+class PacketBeat(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        meta.tag = 'packetbeat.{}'.format(data['type'])
+        dt_fmt = '%Y-%m-%dT%H:%M:%S'
+        dt_txt = data.get('@timestamp')
+        if dt_txt:
+            dt = datetime.datetime.strptime(dt_txt.split('.')[0], dt_fmt)
+            meta.timestamp = int(dt.timestamp())
+
+        self.emit(meta, data)
+
+        
 class EcsHako(Parser):
     def recv(self, meta: MetaData, data: dict):
         meta.tag = 'ecs.hako'
@@ -488,6 +500,7 @@ class Stream:
         'cylance-event':    CylanceEvent,
         'cylance-threat':   CylanceThreat,
         'kea':              Kea,
+        'packetbeat':       PacketBeat,
         # Special task
         'ignore':           Ignore,
     }
