@@ -321,8 +321,9 @@ class Kea(Parser):
             logger.error('Invalid format of kea message: %s', msg)
             raise Exception('Invalid format of kea message')
 
-        keys = ['datetime', 'msg_level', 'proc', 'event', 'hwtype', 'hwaddr',
-                'client_id', 'tx_id', 'msg']
+        keys = ['event_datetime', 'msg_level', 'proc', 'event', 'hwtype',
+                'hwaddr', 'client_id', 'tx_id', 'msg']
+                
         data.update(dict(zip(keys, mo.groups())))
 
         regex = Kea.MSG_REGEX.get(data['event'])
@@ -339,7 +340,7 @@ class Kea(Parser):
 
         
         # Setting metadata.
-        dt_s = data['datetime'].split('.')[0]
+        dt_s = data['event_datetime'].split('.')[0]
         dt = datetime.datetime.strptime(dt_s, dt_fmt)        
         meta.timestamp = int(dt.timestamp())
         meta.tag = 'kea.log'
@@ -356,6 +357,10 @@ class PacketBeat(Parser):
             dt = datetime.datetime.strptime(dt_txt.split('.')[0], dt_fmt)
             meta.timestamp = int(dt.timestamp())
 
+        if data['type'] == 'dns':
+            data['message'] = '{} from {}'.format(data.get('query'),
+                                                  data.get('client_ip'))
+            
         self.emit(meta, data)
 
         
