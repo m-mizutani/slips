@@ -10,6 +10,8 @@ import os
 import boto3
 import gzip
 import re
+import csv
+import io
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -426,14 +428,18 @@ class PaloAlto(Parser):
         if not msg:
             raise ParseError('No "message": {}'.format(str(data)))
 
-        row = msg.split(',')
+        ss = io.StringIO()
+        ss.write(msg)
+        ss.seek(0)
+        row = next(csv.reader(ss))
+
         if len(row) < 4:
             raise ParseError('No enough column: "{}"'.format(row))
 
         column = PaloAlto.COLUMN_MAP.get(row[3])
         if not column:
-            raise ParseError('Unsupported log type "{}": "{}"'.format(row[3],
-                                                                      str(row)))
+            raise ParseError('Unsupported log type "{}": "{}"'
+                             ''.format(row[3], str(row)))
 
         if len(row) != len(column):
             raise ParseError('Column length is not matched, '
