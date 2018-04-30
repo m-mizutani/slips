@@ -10,6 +10,8 @@ import os
 import boto3
 import gzip
 import re
+import csv
+import io
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -299,6 +301,71 @@ class AwsGuardDuty(Parser):
         self.emit(meta, data)
 
 
+class Kea(Parser):
+    PATTERN = re.compile('^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) ([A-Z]+)\s+'
+                         '\[(\S+?)\] (\S+) \[hwtype=(\S+) (\S+)\], cid=\[(.*?)\], '
+                         'tid=(\S+): (.*)')
+    MSG_REGEX = {
+        'DHCP4_INIT_REBOOT':  re.compile('requests address (\S+)'),
+        'DHCP4_LEASE_ADVERT': re.compile('lease (\S+) will be advertised'),
+        'DHCP4_LEASE_ALLOC':  re.compile('lease (\S+) has been allocated'),
+    }
+    
+    def recv(self, meta: MetaData, data: dict):
+        dt_fmt = '%Y-%m-%d %H:%M:%S'
+        msg = data.get('message')
+        if not msg:
+            logger.error('No message of Kea: %s', data)
+            raise Exception('No "message" attribute')
+        
+        mo = Kea.PATTERN.search(msg)
+        if not mo:
+            logger.error('Invalid format of kea message: %s', msg)
+            raise Exception('Invalid format of kea message')
+
+        keys = ['event_datetime', 'msg_level', 'proc', 'event', 'hwtype',
+                'hwaddr', 'client_id', 'tx_id', 'msg']
+                
+        data.update(dict(zip(keys, mo.groups())))
+
+        regex = Kea.MSG_REGEX.get(data['event'])
+        if not regex:
+            logger.error('Not supported event: %s', data['event'])
+            raise Exception('Not supported event of kea')
+        
+        mo2 = regex.search(data['msg'])
+        if not mo2:
+            logger.error('Regex is not matched: %s', data)
+            raise Exception('Regex is not matched')
+
+        data['ipaddr'] = mo2.group(1)
+
+        
+        # Setting metadata.
+        dt_s = data['event_datetime'].split('.')[0]
+        dt = datetime.datetime.strptime(dt_s, dt_fmt)        
+        meta.timestamp = int(dt.timestamp())
+        meta.tag = 'kea.log'
+
+        self.emit(meta, data)
+
+
+class PacketBeat(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        meta.tag = 'packetbeat.{}'.format(data['type'])
+        dt_fmt = '%Y-%m-%dT%H:%M:%S'
+        dt_txt = data.get('@timestamp')
+        if dt_txt:
+            dt = datetime.datetime.strptime(dt_txt.split('.')[0], dt_fmt)
+            meta.timestamp = int(dt.timestamp())
+
+        if data['type'] == 'dns':
+            data['message'] = '{} from {}'.format(data.get('query'),
+                                                  data.get('client_ip'))
+            
+        self.emit(meta, data)
+
+        
 class EcsHako(Parser):
     def recv(self, meta: MetaData, data: dict):
         meta.tag = 'ecs.hako'
@@ -361,14 +428,18 @@ class PaloAlto(Parser):
         if not msg:
             raise ParseError('No "message": {}'.format(str(data)))
 
-        row = msg.split(',')
+        ss = io.StringIO()
+        ss.write(msg)
+        ss.seek(0)
+        row = next(csv.reader(ss))
+
         if len(row) < 4:
             raise ParseError('No enough column: "{}"'.format(row))
 
         column = PaloAlto.COLUMN_MAP.get(row[3])
         if not column:
-            raise ParseError('Unsupported log type "{}": "{}"'.format(row[3],
-                                                                      str(row)))
+            raise ParseError('Unsupported log type "{}": "{}"'
+                             ''.format(row[3], str(row)))
 
         if len(row) != len(column):
             raise ParseError('Column length is not matched, '
@@ -439,7 +510,8 @@ class Stream:
         'cylance':          CylanceEvent,
         'cylance-event':    CylanceEvent,
         'cylance-threat':   CylanceThreat,
-        'ecs-hako':         EcsHako,
+        'kea':              Kea,
+        'packetbeat':       PacketBeat,
         # Special task
         'ignore':           Ignore,
     }

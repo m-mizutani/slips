@@ -80,7 +80,7 @@ def build_event_pusher(processor, routing, kinesis_stream_fast,
     return config
 
 
-def build_dispatcher(base, backend, lane, kinesis_stream_arn, role_dispatcher):
+def build_dispatcher(backend, lane, kinesis_stream_arn, role_dispatcher):
     config = copy.deepcopy(FUNC_TEMPLATE)
     config['Properties']['Environment']['Variables'] = {
         'FUNC_NAME': { 'Fn::Sub': '${MainFunc}' },
@@ -102,7 +102,7 @@ def build_dispatcher(base, backend, lane, kinesis_stream_arn, role_dispatcher):
     return config
 
 
-def build_main_func(base, bucket_mapping, handler, sns_topic_arn, role_arn):
+def build_main_func(bucket_mapping, handler, sns_topic_arn, role_arn):
     args_jdata = json.dumps(handler.get('args', {}), separators=(',', ':'))
     bmap_jdata = json.dumps(bucket_mapping, separators=(',', ':'))
     config = copy.deepcopy(FUNC_TEMPLATE)    
@@ -133,7 +133,7 @@ def build_main_func(base, bucket_mapping, handler, sns_topic_arn, role_arn):
     return config
     
 
-def build_reporter(base, processor, sns_topic_arn, dynamodb_table_name,
+def build_reporter(processor, sns_topic_arn, dynamodb_table_name,
                    role_reporter):
     config = copy.deepcopy(FUNC_TEMPLATE)
     config['Properties']['Role'] = role_reporter
@@ -152,7 +152,7 @@ def build_reporter(base, processor, sns_topic_arn, dynamodb_table_name,
     return config
 
 
-def build_drain(base, processor, dynamodb_table_name, role_arn):
+def build_drain(processor, dynamodb_table_name, role_arn):
     config = copy.deepcopy(FUNC_TEMPLATE)
     config['Properties']['Role'] = role_arn
     config['Properties']['Handler'] = 'drain.lambda_handler'
@@ -518,7 +518,7 @@ def build_dashboard(stack_name):
     
 def build(meta, zpath):
     FUNC_TEMPLATE['Properties']['CodeUri'] = zpath
-    base_conf =        meta['base']
+
     backend =          meta.get('backend', {})
     hdlr_conf =        meta['handler']
     bucket_mapping =   meta['bucket_mapping']
@@ -596,22 +596,20 @@ def build(meta, zpath):
                                           ks_set['EventFastStream']['name'],
                                           ks_set['EventSlowStream']['name'],
                                           role_arn['event_pusher']),
-        'FastDispatcher': build_dispatcher(base_conf, backend,
-                                           lane_conf.get('fast', {}),
+        'FastDispatcher': build_dispatcher(backend, lane_conf.get('fast', {}),
                                            ks_set['EventFastStream']['arn'],
                                            role_arn['dispatcher']),
-        'SlowDispatcher': build_dispatcher(base_conf, backend,
-                                           lane_conf.get('slow', {}),
+        'SlowDispatcher': build_dispatcher(backend, lane_conf.get('slow', {}),
                                            ks_set['EventSlowStream']['arn'],
                                            role_arn['dispatcher']),
-        'Reporter':    build_reporter(base_conf, backend, sns_topic_arn,
+        'Reporter':    build_reporter(backend, sns_topic_arn,
                                       dynamodb_table_name, role_arn['reporter']),
-        'Drain':       build_drain(base_conf, backend, dynamodb_table_name,
+        'Drain':       build_drain(backend, dynamodb_table_name,
                                    role_arn['drain']),
         
         # Main Function
-        'MainFunc':    build_main_func(base_conf, bucket_mapping,
-                                       hdlr_conf, sns_topic_arn, role_main_func),
+        'MainFunc':    build_main_func(bucket_mapping, hdlr_conf,
+                                       sns_topic_arn, role_main_func),
          'SlipsDashboard':   build_dashboard(meta['stack_name']),
     })
     

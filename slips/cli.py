@@ -473,14 +473,13 @@ class Deploy(Job):
         if not yml_file:
             logger.info('no SAM template file is given, building')
 
-            
             sam_template = sam.build(meta, pkg_file)
             tmp_fd, yml_file = tempfile.mkstemp(suffix='.yml')
             os.write(tmp_fd, sam_template.encode('utf8'))
             
         logger.info('SAM template file: %s', yml_file)
-        code_bucket = meta['base']['sam']['code_bucket']
-        code_prefix = meta['base']['sam'].get('code_prefix')
+        code_bucket = meta['sam']['code_bucket']
+        code_prefix = meta['sam'].get('code_prefix')
 
         sam_file = Deploy.configure(yml_file, pkg_file, code_bucket, code_prefix)
         
