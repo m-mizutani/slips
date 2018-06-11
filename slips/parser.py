@@ -244,6 +244,17 @@ class AzureAdEvent(Parser):
         self.emit(meta, data)
 
 
+class AzureAdRiskEvent(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        dt_txt = data.get('riskEventDateTime')
+        if dt_txt:
+            dt = datetime.datetime.strptime(dt_txt[:19], '%Y-%m-%dT%H:%M:%S')
+            meta.timestamp = dt.timestamp()
+
+        meta.tag = 'azure_ad.risk_event'
+        self.emit(meta, data)
+        
+
 class CylanceEvent(Parser):
     def recv(self, meta: MetaData, data: dict):
         dt_txt = data.get('datetime')

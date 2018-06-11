@@ -1,32 +1,30 @@
 import json
 import sys
+
+import helper
+
 sys.path.insert(0, './slips/')
 
 import parser
 
-class Queue(parser.Parser):
-    def __init__(self):
-        self._q = []
-
-    def recv(self, meta: parser.MetaData, data: dict):
-        self._q.append((meta, data))
-
-    def fetch(self):
-        return self._q
-
 
 def test_audit_event():
-    psr = parser.AzureAdAudit()
-    q = Queue()
-    psr.pipe(q)
-
-    meta = parser.MetaData()
-    meta.tag = 'xxx'
     data = json.load(open('./tests/parser/data/azure_ad/audit.json'))
-
-    psr.recv(meta, data)
-    qdata = q.fetch()
+    qdata = helper.exec_test(parser.AzureAdAudit, [data])
 
     assert len(qdata) == 1
     m, d = qdata[0]
+    assert m.tag == 'azure_ad.audit'
     assert int(m.timestamp) == 1528658867
+
+
+def test_risk_event():
+    data = json.load(open('./tests/parser/data/azure_ad/risk_event.json'))
+    qdata = helper.exec_test(parser.AzureAdRiskEvent, [data])
+
+    assert len(qdata) == 1
+    m, d = qdata[0]
+    assert m.tag == 'azure_ad.risk_event'
+    assert int(m.timestamp) == 1521147226
+
+    
