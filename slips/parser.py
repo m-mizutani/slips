@@ -518,6 +518,7 @@ class Stream:
         'guardduty':        AwsGuardDuty,
         'azure-ad-audit':   AzureAdAudit,
         'azure-ad-event':   AzureAdEvent,
+        'azure-ad-risk-event':   AzureAdRiskEvent,
         'cylance':          CylanceEvent,
         'cylance-event':    CylanceEvent,
         'cylance-threat':   CylanceThreat,
