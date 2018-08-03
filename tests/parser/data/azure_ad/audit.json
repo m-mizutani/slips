@@ -1,0 +1,61 @@
+{
+    "id": "Directory_AATEY_1234456",
+    "activityType": "User",
+    "correlationId": "xxxxxxxx-95fc-4426-a1fc-xxxxxxxxxxxxx",
+    "internalCorrelationId": null,
+    "tenantId": "xxxxxxxxxxxx-aaaa-bbbb-cccc-xxxxxxxxxxxxxx",
+    "tenantGeolocation": null,
+    "tenantName": null,
+    "domainName": null,
+    "activityOperationType": "Update",
+    "activityResultStatus": "Success",
+    "activityResultDescription": "",
+    "activity": "Update user",
+    "activityDate": "2018-06-11T04:27:47.3980941Z",
+    "activityDateInMillis": 1528691267398,
+    "componentOrSource": null,
+    "actor": {
+        "@odata.type": "#Microsoft.ActiveDirectory.DataService.PublicApi.Model.Reporting.AuditLog.ActorUserEntity",
+        "objectId": "00000000-0000-0000-0000-000000000000",
+        "name": null,
+        "servicePrincipalName": null,
+        "ipAddress": "<null>",
+        "userPrincipalName": "fim_password_service@support.onmicrosoft.com",
+        "puid": "1003000080ABCDEF12"
+    },
+    "actorType": "User",
+    "targets": [
+        {
+            "@odata.type": "#Microsoft.ActiveDirectory.DataService.PublicApi.Model.Reporting.AuditLog.TargetResourceUserEntity",
+            "objectId": "FE14F23C-F356-40DF-88CC-0FF32804463E",
+            "name": null,
+            "targetResourceType": "User",
+            "modifiedProperties": [
+		{
+		    "name": "Included Updated Properties",
+		    "oldValue": null,
+		    "newValue": "\"StrongAuthenticationPhoneAppDetail\""
+		},
+		{
+		    "name": "TargetId.UserType",
+		    "oldValue": null,
+		    "newValue": "\"Member\""
+		}
+            ],
+            "additionalDetails": null,
+            "puid": "100XXXXXXXXXXXXXXXX",
+            "userPrincipalName": "test@example.com",
+            "ipAddress": null,
+            "isPrivileged": null,
+            "userSource": null
+        }
+    ],
+    "category": "Core Directory",
+    "source": null,
+    "additionalDetails": [
+        {
+            "name": "UserType",
+            "value": "Member"
+        }
+    ]
+}

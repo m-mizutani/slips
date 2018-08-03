@@ -250,7 +250,7 @@ def build_kinesis_stream(processor):
     config = {
         'Type' : 'AWS::Kinesis::Stream',
         'Properties' : {
-            'RetentionPeriodHours' : 48,
+            'RetentionPeriodHours' : 24,
             'ShardCount' : 1,
         }
     }

@@ -1,0 +1,23 @@
+{
+    "@odata.type": "#microsoft.graph.anonymousIpRiskEvent",
+    "id": "TOR-MFASuccess-F8196BAF-91D3-418E-A865-ADC352A700B5",
+    "riskEventStatus": "closedMfaAuto",
+    "riskLevel": "medium",
+    "riskEventType": "AnonymousIpRiskEvent",
+    "riskEventDateTime": "2018-03-16T05:53:46.3066877Z",
+    "closedDateTime": null,
+    "createdDateTime": "2018-03-16T06:00:10.7412075Z",
+    "userId": "a51ff653-3acc-4770-a227-d1f3242d6dc9",
+    "userDisplayName": "Masyoshi Mizutani",
+    "userPrincipalName": "mizutani@example.com",
+    "ipAddress": "192.168.1.2",
+    "location": {
+        "city": "Tokyo",
+        "state": "Tokyo",
+        "countryOrRegion": "Japan",
+        "geoCoordinates": {
+            "latitude": 23.5645,
+            "longitude": 137.424454
+        }
+    }
+}

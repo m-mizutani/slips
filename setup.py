@@ -15,5 +15,6 @@ setup(
     packages=['slips'],
     scripts=['bin/slips'],
     setup_requires=['pytest-runner'],
-    tests_require=['pytest-cov', 'pytest'],
+    # tests_require=['pytest-cov', 'pytest'],
+    tests_require=['pytest'],
 )
