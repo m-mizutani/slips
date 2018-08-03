@@ -475,6 +475,24 @@ class PaloAlto(Parser):
         self.emit(meta, data)
 
 
+class FalconEventLog(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        meta.tag = 'falcon'
+        dt_fmt = '%Y-%m-%dT%H:%M:%S'
+        ts_txt = data.get('timestamp')
+        if ts_txt:
+            meta.timestamp = int(ts_txt) / 1000
+
+        tgt_value = (data.get('RemoteAddressIP4') or
+                     data.get('TargetFileName') or
+                     data.get('DomainName') or
+                     data.get('CommandLine'))
+
+        data['message'] = '{} at {} to {}'.format(data.get('name'),
+                                                  data.get('aip'), tgt_value)
+        self.emit(meta, data)
+
+        
 # --------------------------------------------------------
 # Data Stream
 # --------------------------------------------------------
@@ -512,6 +530,7 @@ class Stream:
         'cylance-threat':   CylanceThreat,
         'kea':              Kea,
         'packetbeat':       PacketBeat,
+        'falcon':           FalconEventLog,
         # Special task
         'ignore':           Ignore,
     }
