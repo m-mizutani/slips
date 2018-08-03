@@ -332,7 +332,7 @@ class Kea(Parser):
         mo = Kea.PATTERN.search(msg)
         if not mo:
             logger.error('Invalid format of kea message: %s', msg)
-            raise Exception('Invalid format of kea message')
+            return
 
         keys = ['event_datetime', 'msg_level', 'proc', 'event', 'hwtype',
                 'hwaddr', 'client_id', 'tx_id', 'msg']
@@ -342,7 +342,8 @@ class Kea(Parser):
         regex = Kea.MSG_REGEX.get(data['event'])
         if not regex:
             logger.error('Not supported event: %s', data['event'])
-            raise Exception('Not supported event of kea')
+            # nothing to do anymore
+            return
         
         mo2 = regex.search(data['msg'])
         if not mo2:
