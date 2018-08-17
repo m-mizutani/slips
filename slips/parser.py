@@ -377,6 +377,39 @@ class PacketBeat(Parser):
         self.emit(meta, data)
 
         
+class AuditBeat(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        meta.tag = 'auditbeat.log'
+        dt_fmt = '%Y-%m-%dT%H:%M:%S'
+        dt_txt = data.get('@timestamp')
+        if dt_txt:
+            dt = datetime.datetime.strptime(dt_txt.split('.')[0], dt_fmt)
+            meta.timestamp = int(dt.timestamp())
+
+        audit = data.get('audit')
+        if not audit:
+            return
+
+        if isinstance(audit.get('kernel'), dict):
+            meta.tag = 'auditbeat.kernel'
+            log = audit.get('kernel')
+            data['message'] = '{} {} {} by {}'.format(
+                log.get('actor', {}).get('primary'),
+                log.get('action'),
+                log.get('thing', {}).get('primary'),
+                log.get('how'))
+        elif isinstance(audit.get('file'), dict):
+            meta.tag = 'auditbeat.file'
+            log = audit.get('file')
+            data['message'] = '{} is {} ({})'.format(
+                log.get('path'),
+                log.get('action'),
+                log.get('sha256'))
+
+            
+        self.emit(meta, data)
+
+        
 class EcsHako(Parser):
     def recv(self, meta: MetaData, data: dict):
         meta.tag = 'ecs.hako'
@@ -542,6 +575,7 @@ class Stream:
         'cylance-threat':   CylanceThreat,
         'kea':              Kea,
         'packetbeat':       PacketBeat,
+        'auditbeat':        AuditBeat,
         'falcon':           FalconEventLog,
         # Special task
         'ignore':           Ignore,
