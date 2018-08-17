@@ -380,33 +380,21 @@ class PacketBeat(Parser):
         
 class AuditBeat(Parser):
     def recv(self, meta: MetaData, data: dict):
-        meta.tag = 'auditbeat.log'
+        meta.tag = 'auditbeat.auditd'
         dt_fmt = '%Y-%m-%dT%H:%M:%S'
         dt_txt = data.get('@timestamp')
         if dt_txt:
             dt = datetime.datetime.strptime(dt_txt.split('.')[0], dt_fmt)
             meta.timestamp = int(dt.timestamp())
 
-        audit = data.get('audit')
-        if not audit:
-            return
-
-        if isinstance(audit.get('kernel'), dict):
-            meta.tag = 'auditbeat.kernel'
-            log = audit.get('kernel')
+        if 'auditd' in data:
             data['message'] = '{} {} {} by {}'.format(
-                log.get('actor', {}).get('primary'),
-                log.get('action'),
-                log.get('thing', {}).get('primary'),
-                log.get('how'))
-        elif isinstance(audit.get('file'), dict):
-            meta.tag = 'auditbeat.file'
-            log = audit.get('file')
-            data['message'] = '{} is {} ({})'.format(
-                log.get('path'),
-                log.get('action'),
-                log.get('sha256'))
-
+                data.get('process', {}).get('title'),
+                data.get('event', {}).get('action'),
+                data.get('auditd', {}).get('summary', {}).get('object', {}).get('primary'),
+                data.get('auditd', {}).get('summary', {}).get('how'))
+        else:
+            data['message'] = str(data.et('event'))
             
         self.emit(meta, data)
 
