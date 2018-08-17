@@ -394,7 +394,7 @@ class AuditBeat(Parser):
                 data.get('auditd', {}).get('summary', {}).get('object', {}).get('primary'),
                 data.get('auditd', {}).get('summary', {}).get('how'))
         else:
-            data['message'] = str(data.et('event'))
+            data['message'] = str(data.get('event'))
             
         self.emit(meta, data)
 
@@ -475,9 +475,9 @@ class PaloAlto(Parser):
                              ''.format(row[3], str(row)))
 
         if len(row) != len(column):
-            raise ParseError('Column length is not matched, '
-                             'Expected = {}, Actual = {}: {}'
-                             ''.format(len(column), len(row), str(row)))
+            logger.error('Column length is not matched, Expected = %s, Actual = %s: %s',
+                         len(column), len(row), str(row))
+            return
 
         data.update(dict(zip(column, row)))
 
@@ -511,10 +511,13 @@ class PaloAlto(Parser):
 class FalconEventLog(Parser):
     def recv(self, meta: MetaData, data: dict):
         meta.tag = 'falcon'
-        dt_fmt = '%Y-%m-%dT%H:%M:%S'
+        dt_fmt = '%Y-%m-%dT%H:%M:%SZ'
         ts_txt = data.get('timestamp')
-        if ts_txt:
-            meta.timestamp = int(ts_txt) / 1000
+        if re.search('^[0-9]+$', ts_txt):
+            meta.timestamp = int(ts_txt)
+        else:
+            dt = datetime.datetime.strptime(ts_txt, dt_fmt)
+            meta.timestamp = int(dt.timestamp())
 
         tgt_value = (data.get('RemoteAddressIP4') or
                      data.get('TargetFileName') or
