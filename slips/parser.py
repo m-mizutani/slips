@@ -514,7 +514,7 @@ class FalconEventLog(Parser):
         dt_fmt = '%Y-%m-%dT%H:%M:%SZ'
         ts_txt = data.get('timestamp')
         if re.search('^[0-9]+$', ts_txt):
-            meta.timestamp = int(ts_txt)
+            meta.timestamp = int(ts_txt) / 1000
         else:
             dt = datetime.datetime.strptime(ts_txt, dt_fmt)
             meta.timestamp = int(dt.timestamp())
