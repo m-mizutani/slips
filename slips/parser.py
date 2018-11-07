@@ -510,7 +510,7 @@ class PaloAlto(Parser):
 
 class FalconEventLog(Parser):
     def recv(self, meta: MetaData, data: dict):
-        meta.tag = 'falcon'
+        meta.tag = 'falcon.event'
         dt_fmt = '%Y-%m-%dT%H:%M:%SZ'
         ts_txt = data.get('timestamp')
         if re.search('^[0-9]+$', ts_txt):
@@ -528,6 +528,24 @@ class FalconEventLog(Parser):
                                                   data.get('aip'), tgt_value)
         self.emit(meta, data)
 
+
+class FalconDetectionLog(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        meta.tag = 'falcon.detection'
+        dt_fmt = '%Y-%m-%dT%H:%M:%SZ'
+        ts_txt = data.get('first_behavior')
+        if re.search('^[0-9]+$', ts_txt):
+            meta.timestamp = int(ts_txt) / 1000
+        else:
+            dt = datetime.datetime.strptime(ts_txt, dt_fmt)
+            meta.timestamp = int(dt.timestamp())
+
+        msgs = ['{} by {}'.format(b.get('technique'), b.get('tactic'))
+                for b in data.get('behaviors', [])]
+        data['message'] = ', '.join(msgs)
+
+        self.emit(meta, data)
+        
         
 # --------------------------------------------------------
 # Data Stream
@@ -569,6 +587,7 @@ class Stream:
         'packetbeat':       PacketBeat,
         'auditbeat':        AuditBeat,
         'falcon':           FalconEventLog,
+        'falcon-detection': FalconDetectionLog,
         # Special task
         'ignore':           Ignore,
     }

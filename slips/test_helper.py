@@ -15,7 +15,7 @@ def s3_object_size(s3_bucket, s3_key):
             return None
 
 
-def setup(hdlr_path, hdlr_args, parsers, dpath, suffix=None):
+def setup(hdlr_path, hdlr_args, parsers, dpath, suffix=None, compress=True):
     CONFIG_PATH = os.environ.get('CONFIG_PATH') or './tests/config.yml'
     config = yaml.load(open(CONFIG_PATH))
 
@@ -26,7 +26,7 @@ def setup(hdlr_path, hdlr_args, parsers, dpath, suffix=None):
     s3_prefix = config['s3']['prefix']
     s3_key = os.path.normpath('{}{}'.format(s3_prefix, suffix))
 
-    if not suffix.endswith('.gz'):
+    if compress and not suffix.endswith('.gz'):
         s3_key += '.gz'
 
     if not os.environ.get('SLIPS_TEST_FORCE_UPLOAD'):
@@ -37,7 +37,7 @@ def setup(hdlr_path, hdlr_args, parsers, dpath, suffix=None):
     if not s3_size:
         client = boto3.client('s3')
         data = open(dpath, 'rb').read()
-        if not suffix.endswith('.gz'):
+        if compress and not suffix.endswith('.gz'):
             data = gzip.compress(data)
             
         client.put_object(Bucket=s3_bucket, Key=s3_key, Body=data)
