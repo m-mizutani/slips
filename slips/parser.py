@@ -533,14 +533,14 @@ class FalconDetectionLog(Parser):
     def recv(self, meta: MetaData, data: dict):
         meta.tag = 'falcon.detection'
         dt_fmt = '%Y-%m-%dT%H:%M:%SZ'
-        ts_txt = data.get('first_behavior')
+        ts_txt = data.get('created_timestamp')
         if re.search('^[0-9]+$', ts_txt):
             meta.timestamp = int(ts_txt) / 1000
         else:
             dt = datetime.datetime.strptime(ts_txt, dt_fmt)
             meta.timestamp = int(dt.timestamp())
 
-        msgs = ['{} by {}'.format(b.get('technique'), b.get('tactic'))
+        msgs = ['Detected {} ({})'.format(b.get('technique'), b.get('tactic'))
                 for b in data.get('behaviors', [])]
         data['message'] = ', '.join(msgs)
 
