@@ -546,6 +546,30 @@ class FalconDetectionLog(Parser):
 
         self.emit(meta, data)
         
+
+class AwsWafLog(Parser):
+    def recv(self, meta: MetaData, data: dict):
+        if data.get('terminatingRuleId') == 'Default_Action':
+            return  # ignore default action
+        
+        meta.tag = 'aws.waf.log'
+        meta.timestamp = int(data['timestamp'] / 1000)
+
+        if 'httpRequest' in data:
+            hdrs = dict([(h.get('name'), h.get('value'))
+                         for h in data['httpRequest'].get('headers', [])])
+            data['httpRequest']['header'] = hdrs
+
+        req = data.get('httpRequest', {})
+        msgfmt = 'WAF {} from {} to {}{} at {}'
+        data['message'] = msgfmt.format(data.get('action'),
+                                        req.get('clientIp'),
+                                        req.get('header', {}).get('Host'),
+                                        req.get('uri'),
+                                        data.get('httpSourceId'))
+        
+        self.emit(meta, data)
+
         
 # --------------------------------------------------------
 # Data Stream
@@ -588,6 +612,7 @@ class Stream:
         'auditbeat':        AuditBeat,
         'falcon':           FalconEventLog,
         'falcon-detection': FalconDetectionLog,
+        'aws-waf':          AwsWafLog,
         # Special task
         'ignore':           Ignore,
     }
